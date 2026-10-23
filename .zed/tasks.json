@@ -1,0 +1,11 @@
+[
+  {
+    "label": "Markdown → PDF (dompdf)",
+    "command": "node",
+    "args": ["$ZED_WORKTREE_ROOT/export.mjs", "$ZED_FILE", "--open"],
+    "cwd": "$ZED_DIRNAME",
+    "save": "current",
+    "reveal": "no_focus",
+    "hide": "on_success"
+  }
+]

@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta
+      name="description"
+      content="墨页：双栏 Markdown 编辑器，在浏览器里用 dompdf.js 导出可搜索的中文矢量 PDF。"
+    />
+    <meta name="theme-color" content="#1f5f4e" />
+    <title>墨页 · Markdown → PDF</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link
+      rel="preload"
+      href="fonts/SourceHanSansSC-Regular.ttf"
+      as="font"
+      type="font/ttf"
+      crossorigin="anonymous"
+    />
+
+    <link rel="stylesheet" href="vendor/codemirror.css" />
+    <link rel="stylesheet" href="styles/doc.css" />
+    <link rel="stylesheet" href="styles/app.css" />
+    <style>
+      @font-face {
+        font-family: "SourceHanSansSC-Regular";
+        src: url("fonts/SourceHanSansSC-Regular.ttf") format("truetype");
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand" title="墨页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6.5 3.5h7l4 4v13h-11z" />
+              <path d="M13.5 3.5v4h4" />
+              <path d="M9 12h6M9 15.5h4.5" />
+            </svg>
+          </span>
+          <span class="brand-name">墨页</span>
+          <span class="brand-sub">Markdown → 矢量 PDF</span>
+        </div>
+
+        <input
+          id="fileName"
+          class="filename"
+          value="未命名.md"
+          spellcheck="false"
+          aria-label="文件名"
+        />
+
+        <div class="topbar-spacer"></div>
+
+        <div class="view-tabs" role="tablist" aria-label="视图">
+          <button class="view-tab" role="tab" data-view="edit" aria-selected="true">编辑</button>
+          <button class="view-tab" role="tab" data-view="preview" aria-selected="false">预览</button>
+        </div>
+
+        <div class="topbar-actions">
+          <button class="btn btn-ghost" id="openBtn" title="打开 Markdown 文件（Ctrl/⌘ O）">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z" />
+            </svg>
+            <span class="btn-label-secondary">打开</span>
+          </button>
+
+          <button class="btn btn-ghost" id="saveBtn" title="保存为 .md（Ctrl/⌘ S）">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            <span class="btn-label-secondary">保存</span>
+          </button>
+
+          <span class="topbar-rule" aria-hidden="true"></span>
+
+          <button class="btn btn-primary" id="exportBtn" title="导出 PDF（Ctrl/⌘ ⇧ E）">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            <span id="exportLabel">导出 PDF</span>
+          </button>
+
+          <button
+            class="icon-btn"
+            id="settingsBtn"
+            aria-label="导出设置"
+            aria-expanded="false"
+            aria-controls="settingsPanel"
+            title="导出设置"
+          >
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="4" y1="21" x2="4" y2="14" />
+              <line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" />
+              <line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="1" y1="14" x2="7" y2="14" />
+              <line x1="9" y1="8" x2="15" y2="8" />
+              <line x1="17" y1="16" x2="23" y2="16" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="progress" id="progress" data-active="false" aria-hidden="true">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
+      </header>
+
+      <main class="workbench" id="workbench" data-view="edit">
+        <section class="pane editor-pane" aria-label="Markdown 编辑区">
+          <div class="toolbar" role="toolbar" aria-label="Markdown 格式">
+            <div class="tool-group">
+              <button class="tool" data-action="h1" title="一级标题" aria-label="一级标题"><span class="tool-label">H1</span></button>
+              <button class="tool" data-action="h2" title="二级标题" aria-label="二级标题"><span class="tool-label">H2</span></button>
+              <button class="tool" data-action="h3" title="三级标题" aria-label="三级标题"><span class="tool-label">H3</span></button>
+            </div>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <div class="tool-group">
+              <button class="tool" data-action="bold" title="加粗" aria-label="加粗"><b>B</b></button>
+              <button class="tool" data-action="italic" title="斜体" aria-label="斜体"><i>I</i></button>
+              <button class="tool" data-action="strike" title="删除线" aria-label="删除线"><span style="text-decoration: line-through">S</span></button>
+              <button class="tool" data-action="inlineCode" title="行内代码" aria-label="行内代码">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <polyline points="9 6 3 12 9 18" />
+                  <polyline points="15 6 21 12 15 18" />
+                  <line x1="13" y1="4" x2="11" y2="20" />
+                </svg>
+              </button>
+              <button class="tool" data-action="link" title="链接" aria-label="链接">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+              </button>
+            </div>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <div class="tool-group">
+              <button class="tool" data-action="ul" title="无序列表" aria-label="无序列表">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="9" y1="6" x2="21" y2="6" />
+                  <line x1="9" y1="12" x2="21" y2="12" />
+                  <line x1="9" y1="18" x2="21" y2="18" />
+                  <circle cx="4.5" cy="6" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="4.5" cy="12" r="1" fill="currentColor" stroke="none" />
+                  <circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none" />
+                </svg>
+              </button>
+              <button class="tool" data-action="ol" title="有序列表" aria-label="有序列表">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="10" y1="6" x2="21" y2="6" />
+                  <line x1="10" y1="12" x2="21" y2="12" />
+                  <line x1="10" y1="18" x2="21" y2="18" />
+                  <path d="M4 6h1v4" />
+                  <path d="M4 10h2" />
+                  <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1" />
+                </svg>
+              </button>
+              <button class="tool" data-action="task" title="任务列表" aria-label="任务列表">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="7" height="7" rx="1" />
+                  <polyline points="4.6 7.4 6.1 8.9 8.6 5.9" />
+                  <line x1="13" y1="7.5" x2="21" y2="7.5" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <line x1="13" y1="17.5" x2="21" y2="17.5" />
+                </svg>
+              </button>
+              <button class="tool" data-action="quote" title="引用" aria-label="引用">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M10 6c-3.5 0-5 2.4-5 5.6V18h5v-5H7.6c0-2.6.8-4.2 2.4-4.2V6Z" />
+                  <path d="M19 6c-3.5 0-5 2.4-5 5.6V18h5v-5h-2.4c0-2.6.8-4.2 2.4-4.2V6Z" />
+                </svg>
+              </button>
+            </div>
+            <span class="tool-sep" aria-hidden="true"></span>
+            <div class="tool-group">
+              <button class="tool" data-action="codeBlock" title="代码块" aria-label="代码块">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <polyline points="9 9.5 7 12 9 14.5" />
+                  <polyline points="15 9.5 17 12 15 14.5" />
+                </svg>
+              </button>
+              <button class="tool" data-action="table" title="表格" aria-label="表格">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                  <line x1="3" y1="15" x2="21" y2="15" />
+                  <line x1="10" y1="4" x2="10" y2="20" />
+                </svg>
+              </button>
+              <button class="tool" data-action="hr" title="分隔线" aria-label="分隔线">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="3" y1="12" x2="21" y2="12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="editor-host" id="editorHost"></div>
+        </section>
+
+        <button
+          class="gutter"
+          id="gutter"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整编辑与预览宽度"
+          aria-valuemin="26"
+          aria-valuemax="74"
+          aria-valuenow="50"
+        ></button>
+
+        <section class="pane preview-pane" id="previewPane" aria-label="版式预览">
+          <div class="paper-wrap">
+            <div class="paper" id="paper" data-empty="false">
+              <article class="pdf-doc" id="doc"></article>
+              <div class="empty-state" id="emptyState" hidden>
+                <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M6.5 3.5h7l4 4v13h-11z" />
+                  <path d="M13.5 3.5v4h4" />
+                  <path d="M9 12h6M9 15.5h4.5" />
+                </svg>
+                <p>左侧输入 Markdown，这里就是导出时的 PDF 版式。<br />纸张、页边距与页眉页脚都可以在右上角设置。</p>
+                <button class="btn btn-secondary" id="sampleBtn">载入示例</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="statusbar">
+        <span class="status-item">
+          <span class="status-dot" id="statusDot" data-state="saved"></span>
+          <span id="statusText" aria-live="polite">本地草稿</span>
+        </span>
+        <span class="status-item status-file" id="statusFile">未命名.md</span>
+        <span class="status-spacer"></span>
+        <span class="status-hint" id="statusHint">Ctrl/⌘ S 保存 · Ctrl/⌘ ⇧ E 导出</span>
+        <span class="status-meta">
+          <span id="statPages">≈ 1 页</span>
+          <span id="statWords">0 字</span>
+          <span id="statLines">0 行</span>
+        </span>
+      </footer>
+    </div>
+
+    <div class="popover" id="settingsPanel" role="dialog" aria-label="导出设置" hidden>
+      <div class="popover-title">
+        <span>导出设置</span>
+        <button class="icon-btn" id="closeSettings" aria-label="关闭设置" style="width: 26px; height: 26px">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <label class="field">
+        <span>纸张</span>
+        <select id="optPaper">
+          <option value="a4">A4 · 210 × 297 mm</option>
+          <option value="a4-landscape">A4 横向 · 297 × 210 mm</option>
+          <option value="letter">Letter · 8.5 × 11 in</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>页边距</span>
+        <select id="optMargin">
+          <option value="36">标准 · 12.7 mm</option>
+          <option value="18">窄 · 6.35 mm</option>
+          <option value="0">无页边距</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span>页眉标题</span>
+        <input id="optTitle" type="text" placeholder="默认取文内一级标题" />
+      </label>
+
+      <label class="switch-row">
+        <span>页脚页码</span>
+        <span class="switch">
+          <input type="checkbox" id="optFooter" checked />
+          <span aria-hidden="true"></span>
+        </span>
+      </label>
+
+      <label class="switch-row">
+        <span>首页不显示页眉页脚</span>
+        <span class="switch">
+          <input type="checkbox" id="optCover" checked />
+          <span aria-hidden="true"></span>
+        </span>
+      </label>
+
+      <label class="switch-row">
+        <span>每个一级标题另起一页</span>
+        <span class="switch">
+          <input type="checkbox" id="optH1Break" />
+          <span aria-hidden="true"></span>
+        </span>
+      </label>
+
+      <label class="switch-row">
+        <span>压缩 PDF 体积</span>
+        <span class="switch">
+          <input type="checkbox" id="optCompress" checked />
+          <span aria-hidden="true"></span>
+        </span>
+      </label>
+
+      <div class="popover-foot">
+        <div id="fontState">中文字体：Source Han Sans SC</div>
+        <div>dompdf.js 在本地渲染矢量文本，文档不会上传。</div>
+      </div>
+    </div>
+
+    <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+
+    <input type="file" id="fileInput" accept=".md,.markdown,.txt,text/markdown" hidden />
+
+    <script src="vendor/codemirror.js"></script>
+    <script src="vendor/xml.js"></script>
+    <script src="vendor/markdown.js"></script>
+    <script src="vendor/javascript.js"></script>
+    <script src="vendor/css.js"></script>
+    <script src="vendor/htmlmixed.js"></script>
+    <script src="vendor/closebrackets.js"></script>
+    <script src="vendor/continuelist.js"></script>
+    <script src="vendor/active-line.js"></script>
+    <script src="vendor/marked.min.js"></script>
+    <script src="vendor/purify.min.js"></script>
+    <script src="vendor/dompdf.min.js"></script>
+
+    <script src="prepare.js"></script>
+    <script src="export-doc.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,328 @@
+/* ==========================================================================
+   doc.css — typography shared by the editor preview, the PDF clone and the CLI.
+   Everything here is measured against a 698px content column (A4, 36pt margin).
+   ========================================================================== */
+
+.pdf-doc {
+  --ink: #191d21;
+  --ink-soft: #3f474f;
+  --muted: #616a74;
+  --rule: #d7dde4;
+  --rule-soft: #e7ebef;
+  --wash: #f4f6f8;
+  --accent: #1f5f4e;
+
+  box-sizing: border-box;
+  font-family: "SourceHanSansSC-Regular", "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei", "Segoe UI", sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--ink);
+  letter-spacing: 0.008em;
+  text-align: left;
+  overflow-wrap: break-word;
+}
+
+.pdf-doc *,
+.pdf-doc *::before,
+.pdf-doc *::after {
+  box-sizing: border-box;
+}
+
+.pdf-doc > :first-child {
+  margin-top: 0;
+}
+
+.pdf-doc > :last-child {
+  margin-bottom: 0;
+}
+
+/* --- headings ----------------------------------------------------------- */
+
+.pdf-doc h1,
+.pdf-doc h2,
+.pdf-doc h3,
+.pdf-doc h4,
+.pdf-doc h5,
+.pdf-doc h6 {
+  color: var(--ink);
+  line-height: 1.4;
+  margin: 1.6em 0 0.6em;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+.pdf-doc h1 {
+  font-size: 26px;
+  line-height: 1.32;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 0;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.pdf-doc h2 {
+  font-size: 20px;
+  font-weight: 700;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.pdf-doc h3 {
+  font-size: 16.5px;
+  font-weight: 700;
+}
+
+.pdf-doc h4,
+.pdf-doc h5,
+.pdf-doc h6 {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pdf-doc h5,
+.pdf-doc h6 {
+  color: var(--ink-soft);
+}
+
+/* --- text --------------------------------------------------------------- */
+
+.pdf-doc p {
+  margin: 0 0 0.85em;
+}
+
+.pdf-doc strong {
+  font-weight: 700;
+  color: #0d1013;
+}
+
+.pdf-doc em {
+  font-style: italic;
+}
+
+.pdf-doc del {
+  color: var(--muted);
+}
+
+.pdf-doc a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.pdf-doc hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2em 0;
+}
+
+.pdf-doc small {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.pdf-doc mark {
+  background: #fbf0c4;
+  color: inherit;
+  padding: 0 2px;
+}
+
+.pdf-doc kbd {
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 0.82em;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: #fff;
+}
+
+/* --- lists -------------------------------------------------------------- */
+
+.pdf-doc ul,
+.pdf-doc ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.55em;
+}
+
+.pdf-doc li {
+  margin: 0.22em 0;
+}
+
+.pdf-doc li > ul,
+.pdf-doc li > ol {
+  margin: 0.22em 0 0.3em;
+}
+
+.pdf-doc li::marker {
+  color: #8a939c;
+}
+
+.pdf-doc li.task-list-item {
+  list-style: none;
+  margin-left: -1.35em;
+}
+
+.pdf-doc li.task-list-item input[type="checkbox"] {
+  width: 13px;
+  height: 13px;
+  margin: 0 7px 0 0;
+  vertical-align: -1px;
+  accent-color: var(--accent);
+}
+
+/* --- quotes ------------------------------------------------------------- */
+
+.pdf-doc blockquote {
+  margin: 1.1em 0;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid #c9d1d9;
+  color: #4d565f;
+}
+
+.pdf-doc blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.pdf-doc blockquote p {
+  margin-bottom: 0.5em;
+}
+
+/* --- code --------------------------------------------------------------- */
+
+.pdf-doc code {
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: 0.87em;
+  background: var(--wash);
+  border-radius: 3px;
+  padding: 1px 4px;
+  /* the whole point: no horizontal overflow in a paged PDF */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pdf-doc pre {
+  margin: 1em 0;
+  padding: 12px 14px;
+  background: #f6f8fa;
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 12.5px;
+  line-height: 1.68;
+}
+
+.pdf-doc pre code {
+  display: block;
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  white-space: inherit;
+  overflow-wrap: inherit;
+  word-break: inherit;
+}
+
+/* --- tables ------------------------------------------------------------- */
+
+.pdf-doc table {
+  width: 100%;
+  max-width: 100%;
+  margin: 1.1em 0;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  line-height: 1.65;
+}
+
+.pdf-doc th,
+.pdf-doc td {
+  border: 1px solid var(--rule);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Long URLs / identifiers may break anywhere; ordinary cells keep their
+   natural width so numbers are not chopped into 3 lines. */
+.pdf-doc .cell-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.pdf-doc thead th {
+  background: #f2f4f7;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* marked emits HTML align attributes; keep them winning over the base rule. */
+.pdf-doc th[align="right"],
+.pdf-doc td[align="right"] {
+  text-align: right;
+}
+
+.pdf-doc th[align="center"],
+.pdf-doc td[align="center"] {
+  text-align: center;
+}
+
+.pdf-doc tbody tr:nth-child(even) td {
+  background: #fafbfc;
+}
+
+.pdf-doc table caption {
+  caption-side: bottom;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding-top: 6px;
+}
+
+/* --- media -------------------------------------------------------------- */
+
+.pdf-doc img {
+  max-width: 100%;
+  height: auto;
+  vertical-align: middle;
+  break-inside: avoid;
+}
+
+.pdf-doc figure {
+  margin: 1.2em 0;
+  text-align: center;
+}
+
+.pdf-doc figcaption {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: 6px;
+}
+
+/* --- details / misc ----------------------------------------------------- */
+
+.pdf-doc details {
+  margin: 1em 0;
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.pdf-doc summary {
+  cursor: default;
+  color: var(--ink-soft);
+}
+
+/* --- print (browser fallback, not the dompdf path) ---------------------- */
+
+@media print {
+  .pdf-doc {
+    font-size: 10.5pt;
+  }
+}
