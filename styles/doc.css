@@ -196,6 +196,7 @@
 .pdf-doc code {
   font-family: "Cascadia Code", Consolas, "Courier New", monospace;
   font-size: 0.87em;
+  color: var(--ink);
   background: var(--wash);
   border-radius: 3px;
   padding: 1px 4px;
@@ -211,6 +212,7 @@
   background: #f6f8fa;
   border: 1px solid var(--rule-soft);
   border-radius: 4px;
+  color: var(--ink);
   overflow: visible;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

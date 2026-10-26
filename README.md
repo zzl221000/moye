@@ -9,6 +9,7 @@ md-pdf/
 ├─ app.js                界面逻辑、导出、设置、快捷键
 ├─ prepare.js            导出前处理（分页属性、长 token、任务列表）
 ├─ export-doc.js         共用的导出核心（编辑器与 CLI 都走这里）
+├─ themes.js             主题 CSS 组（编辑器与 CLI 共用）
 ├─ export.mjs            CLI：Markdown → PDF（headless Chrome + CDP）
 ├─ build.mjs             生成 dist/：纯拷贝 + .nojekyll / CNAME
 ├─ serve.mjs             本地静态服务器（支持 --dir / --port）
@@ -37,14 +38,47 @@ dompdf 的 Worker 也可能被安全策略挡住。
 
 | 操作 | Windows / Linux | macOS |
 | --- | --- | --- |
-| 保存 .md | `Ctrl+S` | `⌘S` |
+| 保存 / 写回文件 | `Ctrl+S` | `⌘S` |
+| 另存为 | `Ctrl+Shift+S` | `⌘⇧S` |
 | 导出 PDF | `Ctrl+Shift+E` | `⌘⇧E` |
 | 打开文件 | `Ctrl+O` | `⌘O` |
 
 右上角设置里可以改纸张（A4 / A4 横向 / Letter）、页边距、页眉标题、
-页脚页码、首页不显示页眉页脚、每个 H1 另起一页、是否压缩。
+页脚页码、首页不显示页眉页脚、每个 H1 另起一页、是否压缩，以及文档主题、
+页面背景、细节 CSS、双栏同步滚动。
 
 导出后提示条里有「打开」，会用新标签页打开生成的 PDF，方便立即检查分页。
+
+### 保存到原文件
+
+Chrome / Edge（HTTPS 或 localhost）下，「打开」「保存」走浏览器
+[File System Access API](https://developer.mozilla.org/docs/Web/API/File_System_API)：
+
+- 打开文件后记住句柄，`Ctrl+S` **直接写回原文件**，不再下载
+- `Ctrl+Shift+S` 另存为；修改文件名后保存也会新建文件
+- 把 `.md` 拖进页面同样会拿到句柄，后续保存写回
+- 首次写入会请求权限，拒绝则取消本次保存
+- Firefox / Safari 没有这个 API，自动降级为下载副本（设置底部会显示当前状态）
+- 句柄只在当前会话有效；刷新后重新「打开」即可。草稿仍会自动暂存在 localStorage
+
+### 主题与细节 CSS
+
+设置面板里的「文档样式」：
+
+- **主题**：纸张 / 刊物 / 紧凑 / 石墨（深色），是一组作用在 `.pdf-doc` 上的 CSS 组
+- **页面背景**：同时作用于预览纸张和 PDF 页面底色
+- **细节 CSS**：实时生效，导出时一起写入 PDF
+- **双栏同步滚动**：默认开启，按滚动比例同步编辑器和预览
+
+```css
+/* 细节 CSS 示例 */
+.pdf-doc { font-size: 15px; }
+.pdf-doc h1 { color: #8a3b22; }
+.pdf-doc table { font-size: 13px; }
+```
+
+主题定义在 `themes.js`，可以按同样结构加一组。自定义 CSS 建议只写 `.pdf-doc ...`
+选择器；换 `font-family` 需要额外嵌入 TTF，否则 PDF 里的中文可能缺字。
 
 ## 二、命令行导出（适合 Zed / 脚本 / CI）
 
@@ -52,6 +86,7 @@ dompdf 的 Worker 也可能被安全策略挡住。
 node export.mjs 报告.md
 node export.mjs 报告.md --paper a4-landscape --h1-break --open
 node export.mjs 报告.md --margin 18 --no-footer
+node export.mjs 报告.md --theme dark --css my.css --background '#0d1117'
 ```
 
 | 选项 | 说明 |
@@ -60,6 +95,9 @@ node export.mjs 报告.md --margin 18 --no-footer
 | `--paper <name>` | `a4` / `a4-landscape` / `letter` |
 | `--margin <pt>` | 页边距，单位 pt（默认 36 ≈ 12.7mm） |
 | `--title <text>` | 页眉标题（默认取第一个一级标题） |
+| `--theme <name>` | `paper` / `editorial` / `compact` / `dark` |
+| `--css <file>` | 追加自定义 CSS 文件（作用于 `.pdf-doc`） |
+| `--background <color>` | 页面背景色（默认取主题） |
 | `--no-footer` | 不输出页脚页码 |
 | `--no-cover` | 首页也显示页眉页脚 |
 | `--h1-break` | 每个一级标题另起一页 |
@@ -134,11 +172,17 @@ dompdf.js 依赖 `getComputedStyle`、布局盒模型和 Web Worker，在 Zed �
 
 ## 五、已知限制
 
-- 跨页的**表格不会重复表头**（dompdf 当前不上重复 `<thead>`）。长表格的第二页
+- 跨页的**表格不会重复表头**（dompdf 当前不支持重复 `<thead>`）。长表格的第二页
   直接从数据行开始。
+- File System Access API 目前只有 Chromium 系（Chrome / Edge）完整支持；Firefox / Safari
+  会降级为下载。写回需要 HTTPS 或 localhost。
 - 不支持 Mermaid、KaTeX、Obsidian 双链等扩展语法；需要的话可在 `app.js` 里加
   marked 扩展。
 - 远程图片需要服务端返回 CORS 头（导出时 `useCORS: true`），否则会被跳过。
+- 字体现在是同源加载；GitHub Pages 本身由 Fastly CDN 提供，字体已经是 CDN 响应。
+  若要换到自己的 OSS/jsDelivr，需要同时改 `index.html` 的 `@font-face`/preload 和
+  `app.js` 的 `fetch` 地址，并确保 CDN 返回 `Access-Control-Allow-Origin`。
+  换 CDN 不会减小 4.5MB 体积，真正省流量还是用上面的 `pyftsubset`。
 - 思源黑体只打包了 Regular。粗体由渲染器合成；如果你需要真正的 Bold，
   把 `SourceHanSansSC-Bold.ttf` 放进 `fonts/`，并在 `export-doc.js` 的
   `fontConfig` 里再注册一条 `fontWeight: 700`。

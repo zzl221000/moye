@@ -58,6 +58,10 @@
     cover: true,
     h1Break: false,
     compress: true,
+    theme: "paper",
+    background: "#ffffff",
+    css: "",
+    sync: true,
   };
 
   var $ = function (id) {
@@ -100,6 +104,13 @@
     optCover: $("optCover"),
     optH1Break: $("optH1Break"),
     optCompress: $("optCompress"),
+    optTheme: $("optTheme"),
+    optBg: $("optBg"),
+    optCss: $("optCss"),
+    optSync: $("optSync"),
+    clearCss: $("clearCss"),
+    docTheme: $("docTheme"),
+    fsState: $("fsState"),
   };
 
   var options = loadOptions();
@@ -109,7 +120,25 @@
   var lastPages = 0;
   var renderTimer = 0;
   var saveTimer = 0;
+  var cssTimer = 0;
   var progressHideTimer = 0;
+  var saving = false;
+  var dirty = false;
+  var fileHandle = null;
+  var syncSuppress = null;
+
+  var canOpenWithPicker = typeof window.showOpenFilePicker === "function";
+  var canSaveWithPicker = typeof window.showSaveFilePicker === "function";
+
+  var MARKDOWN_TYPES = [
+    {
+      description: "Markdown",
+      accept: {
+        "text/markdown": [".md", ".markdown"],
+        "text/plain": [".txt"],
+      },
+    },
+  ];
 
   /* ---------------------------------------------------------------- editor */
 
@@ -137,6 +166,12 @@
       },
       "Cmd-S": function () {
         saveMarkdown();
+      },
+      "Ctrl-Shift-S": function () {
+        saveMarkdown(true);
+      },
+      "Cmd-Shift-S": function () {
+        saveMarkdown(true);
       },
     },
   });
@@ -189,7 +224,6 @@
     els.emptyState.hidden = !empty;
 
     updateStats(markdown);
-    setStatus("已保存到本地", "saved");
   }
 
   function updateStats(markdown) {
@@ -242,6 +276,10 @@
       cover: els.optCover.checked,
       h1Break: els.optH1Break.checked,
       compress: els.optCompress.checked,
+      theme: els.optTheme.value || "paper",
+      background: els.optBg.value || "#ffffff",
+      css: els.optCss.value,
+      sync: els.optSync.checked,
     };
   }
 
@@ -253,6 +291,56 @@
     els.optCover.checked = !!options.cover;
     els.optH1Break.checked = !!options.h1Break;
     els.optCompress.checked = !!options.compress;
+    els.optSync.checked = options.sync !== false;
+    els.optBg.value = options.background || "#ffffff";
+    els.optCss.value = options.css || "";
+
+    var themes = window.MOYE_THEMES || {};
+    els.optTheme.value = themes[options.theme] ? options.theme : "paper";
+  }
+
+  function getTheme() {
+    var themes = window.MOYE_THEMES || {};
+    return themes[options.theme] || themes.paper || {
+      label: "纸张",
+      background: "#ffffff",
+      headerColor: "#6b7279",
+      footerColor: "#8a9199",
+      css: "",
+    };
+  }
+
+  function populateThemes() {
+    var themes = window.MOYE_THEMES || {};
+    els.optTheme.innerHTML = "";
+    Object.keys(themes).forEach(function (key) {
+      var option = document.createElement("option");
+      option.value = key;
+      option.textContent = themes[key].label || key;
+      els.optTheme.appendChild(option);
+    });
+  }
+
+  function isDark(color) {
+    var match = /^#?([0-9a-f]{6})$/i.exec(String(color || ""));
+    if (!match) return false;
+    var value = parseInt(match[1], 16);
+    var r = (value >> 16) & 255;
+    var g = (value >> 8) & 255;
+    var b = value & 255;
+    return 0.299 * r + 0.587 * g + 0.114 * b < 128;
+  }
+
+  function applyDocumentStyles() {
+    var theme = getTheme();
+    var background = options.background || theme.background || "#ffffff";
+
+    els.docTheme.textContent =
+      (theme.css ? theme.css + "\n" : "") + (options.css || "");
+
+    els.paper.style.setProperty("--paper", background);
+    els.paper.setAttribute("data-dark", isDark(background) ? "true" : "false");
+    updateStats();
   }
 
   function applyPaperMetrics() {
@@ -291,6 +379,7 @@
   }
 
   function markDirty() {
+    dirty = true;
     setStatus("未保存", "dirty");
   }
 
@@ -396,51 +485,153 @@
       .trim();
   }
 
-  function loadText(text, name) {
+  function suggestFileName() {
+    return normalizeFileName(els.fileName.value).replace(/[\\/:*?"<>|]/g, "-");
+  }
+
+  function loadText(text, name, handle) {
+    fileHandle = handle || null;
     cm.setValue(text.replace(/\r\n/g, "\n"));
     cm.clearHistory();
+    clearTimeout(renderTimer);
+    clearTimeout(saveTimer);
     els.fileName.value = normalizeFileName(name);
     syncFileName();
     renderMarkdown();
     saveDraft();
+    dirty = false;
+    setStatus(
+      fileHandle ? "已打开 " + fileHandle.name : "已载入 " + els.fileName.value,
+      "saved"
+    );
     cm.focus();
   }
 
-  function openFile() {
-    els.fileInput.value = "";
-    els.fileInput.click();
+  async function readFile(file, handle) {
+    if (!/\.(md|markdown|txt)$/i.test(file.name) && file.type.indexOf("text") !== 0) {
+      showToast("无法打开这个文件", "请选择 .md / .markdown / .txt 文件。", "error");
+      return;
+    }
+    try {
+      var text = await file.text();
+      loadText(text, file.name, handle || null);
+      showToast("已打开 " + file.name, null, "info");
+    } catch (error) {
+      showToast("读取文件失败", error.message, "error");
+    }
+  }
+
+  async function openFile() {
+    if (!canOpenWithPicker) {
+      els.fileInput.value = "";
+      els.fileInput.click();
+      return;
+    }
+    try {
+      var handles = await window.showOpenFilePicker({
+        multiple: false,
+        types: MARKDOWN_TYPES,
+      });
+      if (!handles || !handles[0]) return;
+      var handle = handles[0];
+      var file = await handle.getFile();
+      await readFile(file, handle);
+    } catch (error) {
+      if (error && error.name === "AbortError") return;
+      showToast("打开文件失败", error.message || String(error), "error");
+    }
   }
 
   els.fileInput.addEventListener("change", function () {
     var file = els.fileInput.files && els.fileInput.files[0];
     if (!file) return;
-    readFile(file);
+    readFile(file, null);
   });
 
-  function readFile(file) {
-    if (!/\.(md|markdown|txt)$/i.test(file.name) && file.type.indexOf("text") !== 0) {
-      showToast("无法打开这个文件", "请选择 .md / .markdown / .txt 文件。", "error");
-      return;
-    }
-    file
-      .text()
-      .then(function (text) {
-        loadText(text, file.name);
-        showToast("已打开 " + file.name, null, "info");
-      })
-      .catch(function (error) {
-        showToast("读取文件失败", error.message, "error");
-      });
+  async function ensurePermission(handle) {
+    if (!handle || typeof handle.queryPermission !== "function") return true;
+    var descriptor = { mode: "readwrite" };
+    var state = await handle.queryPermission(descriptor);
+    if (state === "granted") return true;
+    state = await handle.requestPermission(descriptor);
+    return state === "granted";
   }
 
-  function saveMarkdown() {
-    var name = normalizeFileName(els.fileName.value).replace(/[\\/:*?"<>|]/g, "-");
-    var blob = new Blob([cm.getValue()], { type: "text/markdown;charset=utf-8" });
-    downloadBlob(blob, name);
-    els.fileName.value = name;
-    syncFileName();
-    saveDraft();
-    setStatus("已保存 " + name, "saved");
+  async function writeToHandle(handle, text) {
+    var writable = await handle.createWritable();
+    try {
+      await writable.write(text);
+      await writable.close();
+    } catch (error) {
+      try {
+        await writable.abort();
+      } catch (abortError) {
+        /* ignore */
+      }
+      throw error;
+    }
+  }
+
+  async function saveMarkdown(saveAs) {
+    if (saving) return;
+    saving = true;
+    var text = cm.getValue();
+    var name = suggestFileName();
+
+    try {
+      if (!saveAs && fileHandle) {
+        if (!(await ensurePermission(fileHandle))) {
+          showToast("没有写入权限", "浏览器拒绝了写回原文件，本次保存已取消。", "error");
+          setStatus("没有写入权限", "error");
+          return;
+        }
+        clearTimeout(saveTimer);
+        await writeToHandle(fileHandle, text);
+        els.fileName.value = normalizeFileName(fileHandle.name);
+        syncFileName();
+        dirty = false;
+        saveDraft();
+        setStatus("已保存到 " + fileHandle.name, "saved");
+        return;
+      }
+
+      if (canSaveWithPicker) {
+        var handle;
+        try {
+          handle = await window.showSaveFilePicker({
+            suggestedName: name,
+            types: MARKDOWN_TYPES,
+          });
+        } catch (error) {
+          if (error && error.name === "AbortError") return;
+          throw error;
+        }
+        clearTimeout(saveTimer);
+        await writeToHandle(handle, text);
+        fileHandle = handle;
+        els.fileName.value = normalizeFileName(handle.name);
+        syncFileName();
+        dirty = false;
+        saveDraft();
+        setStatus("已保存到 " + handle.name, "saved");
+        return;
+      }
+
+      clearTimeout(saveTimer);
+      downloadBlob(new Blob([text], { type: "text/markdown;charset=utf-8" }), name);
+      els.fileName.value = name;
+      syncFileName();
+      dirty = false;
+      saveDraft();
+      setStatus("已下载 " + name, "saved");
+    } catch (error) {
+      console.error(error);
+      if (error && error.name === "AbortError") return;
+      showToast("保存失败", error.message || String(error), "error");
+      setStatus("保存失败", "error");
+    } finally {
+      saving = false;
+    }
   }
 
   function downloadBlob(blob, name) {
@@ -466,7 +657,13 @@
           at: Date.now(),
         })
       );
-      setStatus("已保存到本地", "saved");
+      if (!dirty) return;
+      if (fileHandle) {
+        setStatus("草稿已暂存", "dirty");
+      } else {
+        dirty = false;
+        setStatus("已保存到本地", "saved");
+      }
     } catch (error) {
       setStatus("本地草稿不可用", "error");
     }
@@ -479,15 +676,45 @@
   }
 
   els.fileName.addEventListener("change", function () {
-    els.fileName.value = normalizeFileName(els.fileName.value);
+    var next = normalizeFileName(els.fileName.value);
+    els.fileName.value = next;
+
+    var detached = false;
+    if (fileHandle && next !== fileHandle.name) {
+      fileHandle = null;
+      detached = true;
+    }
+
     syncFileName();
     saveDraft();
+
+    if (detached) {
+      dirty = true;
+      setStatus("文件名已修改，保存时会新建文件", "dirty");
+    }
   });
 
   els.fileName.addEventListener("keydown", function (event) {
     if (event.key === "Enter") {
       event.preventDefault();
       els.fileName.blur();
+    }
+  });
+
+  function refreshFsState() {
+    if (canOpenWithPicker && canSaveWithPicker) {
+      els.fsState.textContent = "文件写回：支持 · Ctrl+S 直接写回原文件";
+      els.saveBtn.title = "保存到原文件（Ctrl/⌘ S）；另存为 Ctrl/⌘ ⇧ S";
+    } else {
+      els.fsState.textContent = "文件写回：当前浏览器不支持，保存会下载副本";
+      els.saveBtn.title = "保存副本（Ctrl/⌘ S）";
+    }
+  }
+
+  window.addEventListener("beforeunload", function (event) {
+    if (dirty && fileHandle) {
+      event.preventDefault();
+      event.returnValue = "";
     }
   });
 
@@ -579,6 +806,7 @@
 
     var title = resolveHeaderTitle();
     var name = baseName(els.fileName.value) + ".pdf";
+    var theme = getTheme();
 
     clearTimeout(progressHideTimer);
 
@@ -592,6 +820,9 @@
           cover: !!options.cover,
           pageBreakOnH1: !!options.h1Break,
           compress: !!options.compress,
+          background: options.background || theme.background || "#ffffff",
+          headerColor: theme.headerColor,
+          footerColor: theme.footerColor,
           fontBytes: bytes,
           metadata: {
             title: title || baseName(els.fileName.value),
@@ -629,7 +860,7 @@
               URL.revokeObjectURL(url);
             }, 120000);
 
-            setStatus("已导出 " + name, "saved");
+            setStatus("已导出 " + name, dirty ? "dirty" : "saved");
           });
       })
       .catch(function (error) {
@@ -816,10 +1047,6 @@
     fitZoom();
   });
 
-  els.previewPane.addEventListener("scroll", function () {
-    if (!els.settingsPanel.hidden) closeSettings(false);
-  });
-
   [els.optPaper, els.optMargin, els.optFooter, els.optCover, els.optH1Break, els.optCompress].forEach(
     function (control) {
       control.addEventListener("change", function () {
@@ -836,7 +1063,99 @@
     updateStats();
   });
 
+  els.optTheme.addEventListener("change", function () {
+    var theme = (window.MOYE_THEMES || {})[els.optTheme.value];
+    if (theme && theme.background) els.optBg.value = theme.background;
+    options = readOptionsFromControls();
+    saveOptions();
+    applyDocumentStyles();
+  });
+
+  els.optBg.addEventListener("input", function () {
+    options = readOptionsFromControls();
+    saveOptions();
+    applyDocumentStyles();
+  });
+
+  els.optCss.addEventListener("input", function () {
+    options = readOptionsFromControls();
+    applyDocumentStyles();
+    clearTimeout(cssTimer);
+    cssTimer = setTimeout(saveOptions, 300);
+  });
+
+  els.optCss.addEventListener("change", function () {
+    clearTimeout(cssTimer);
+    options = readOptionsFromControls();
+    saveOptions();
+    applyDocumentStyles();
+  });
+
+  els.clearCss.addEventListener("click", function () {
+    els.optCss.value = "";
+    options = readOptionsFromControls();
+    saveOptions();
+    applyDocumentStyles();
+    els.optCss.focus();
+  });
+
+  els.optSync.addEventListener("change", function () {
+    options = readOptionsFromControls();
+    saveOptions();
+    syncSuppress = null;
+    if (options.sync) syncRatio(cmScroller, els.previewPane);
+  });
+
   /* --------------------------------------------------------------- layout */
+
+  var cmScroller = cm.getScrollerElement();
+
+  function syncRatio(from, to) {
+    if (!options.sync) return;
+    if (!from.clientHeight || !to.clientHeight) return;
+
+    var fromMax = from.scrollHeight - from.clientHeight;
+    var toMax = to.scrollHeight - to.clientHeight;
+    if (fromMax <= 0 || toMax <= 0) return;
+
+    var value = (from.scrollTop / fromMax) * toMax;
+    if (Math.abs(to.scrollTop - value) < 1.5) return;
+
+    syncSuppress = { element: to, value: value };
+    to.scrollTop = value;
+  }
+
+  function onSyncedScroll(from, to) {
+    if (!options.sync) return;
+
+    if (
+      syncSuppress &&
+      syncSuppress.element === from &&
+      Math.abs(from.scrollTop - syncSuppress.value) < 3
+    ) {
+      syncSuppress = null;
+      return;
+    }
+
+    syncSuppress = null;
+    syncRatio(from, to);
+  }
+
+  cmScroller.addEventListener(
+    "scroll",
+    function () {
+      onSyncedScroll(cmScroller, els.previewPane);
+    },
+    { passive: true }
+  );
+
+  els.previewPane.addEventListener(
+    "scroll",
+    function () {
+      onSyncedScroll(els.previewPane, cmScroller);
+    },
+    { passive: true }
+  );
 
   function setSplit(percent) {
     var clamped = Math.max(26, Math.min(74, percent));
@@ -924,19 +1243,27 @@
 
   /* ------------------------------------------------------------- commands */
 
-  els.openBtn.addEventListener("click", openFile);
-  els.saveBtn.addEventListener("click", saveMarkdown);
+  els.openBtn.addEventListener("click", function () {
+    openFile();
+  });
+  els.saveBtn.addEventListener("click", function () {
+    saveMarkdown();
+  });
   els.exportBtn.addEventListener("click", exportPdf);
   els.sampleBtn.addEventListener("click", function () {
-    loadText(SAMPLE, "季度经营分析.md");
+    loadText(SAMPLE, "季度经营分析.md", null);
   });
 
   document.addEventListener("keydown", function (event) {
+    if (event.defaultPrevented) return;
     var mod = event.metaKey || event.ctrlKey;
     if (!mod) return;
     var key = event.key.toLowerCase();
 
-    if (key === "s" && !event.shiftKey) {
+    if (key === "s" && event.shiftKey) {
+      event.preventDefault();
+      saveMarkdown(true);
+    } else if (key === "s") {
       event.preventDefault();
       saveMarkdown();
     } else if (key === "o") {
@@ -948,24 +1275,58 @@
     }
   });
 
-  ["dragover", "drop"].forEach(function (type) {
-    document.addEventListener(type, function (event) {
-      if (!event.dataTransfer) return;
-      var items = event.dataTransfer.types || [];
-      var hasFiles = Array.prototype.indexOf.call(items, "Files") >= 0;
-      if (!hasFiles) return;
+  document.addEventListener("dragover", function (event) {
+    if (!event.dataTransfer) return;
+    var types = event.dataTransfer.types || [];
+    if (Array.prototype.indexOf.call(types, "Files") >= 0) {
       event.preventDefault();
-      if (type !== "drop") return;
-      var file = event.dataTransfer.files && event.dataTransfer.files[0];
-      if (file) readFile(file);
+    }
+  });
+
+  document.addEventListener("drop", function (event) {
+    if (!event.dataTransfer) return;
+    var types = event.dataTransfer.types || [];
+    if (Array.prototype.indexOf.call(types, "Files") < 0) return;
+    event.preventDefault();
+
+    var file = event.dataTransfer.files && event.dataTransfer.files[0];
+    var item = event.dataTransfer.items && event.dataTransfer.items[0];
+    var handlePromise = Promise.resolve(null);
+
+    if (item && typeof item.getAsFileSystemHandle === "function") {
+      try {
+        handlePromise = item.getAsFileSystemHandle().catch(function () {
+          return null;
+        });
+      } catch (error) {
+        handlePromise = Promise.resolve(null);
+      }
+    }
+
+    handlePromise.then(function (handle) {
+      var isFileHandle = handle && handle.kind === "file";
+      var filePromise = file
+        ? Promise.resolve(file)
+        : isFileHandle
+          ? handle.getFile().catch(function () {
+              return null;
+            })
+          : Promise.resolve(null);
+
+      return filePromise.then(function (resolved) {
+        if (resolved) readFile(resolved, isFileHandle ? handle : null);
+      });
     });
   });
 
   /* ----------------------------------------------------------------- boot */
 
   (function boot() {
+    populateThemes();
     writeOptionsToControls();
     applyPaperMetrics();
+    applyDocumentStyles();
+    refreshFsState();
 
     var draft = null;
     try {
@@ -980,9 +1341,13 @@
 
     cm.setValue(content);
     cm.clearHistory();
+    clearTimeout(renderTimer);
+    clearTimeout(saveTimer);
     els.fileName.value = normalizeFileName(name);
     syncFileName();
     renderMarkdown();
+    dirty = false;
+    setStatus(draft ? "已恢复本地草稿" : "示例文档", "saved");
 
     loadFont().catch(function () {
       showToast(
@@ -1008,6 +1373,16 @@
       return Object.assign({}, options);
     },
     exportPdf: exportPdf,
+    saveMarkdown: function (saveAs) {
+      return saveMarkdown(saveAs);
+    },
+    openFile: openFile,
+    getFileHandleName: function () {
+      return fileHandle ? fileHandle.name : null;
+    },
+    isDirty: function () {
+      return dirty;
+    },
     sample: SAMPLE,
   };
 })();

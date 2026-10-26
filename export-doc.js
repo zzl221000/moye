@@ -71,7 +71,7 @@
           content: options.headerTitle || "",
           height: HEADER_HEIGHT,
           contentPosition: "leftTop",
-          contentColor: "#6b7279",
+          contentColor: options.headerColor || "#6b7279",
           contentFontSize: 10,
           padding: [0, 0, 0, 0]
         }
@@ -82,7 +82,7 @@
           content: "第 ${currentPage} 页 / 共 ${totalPages} 页",
           height: FOOTER_HEIGHT,
           contentPosition: "center",
-          contentColor: "#8a9199",
+          contentColor: options.footerColor || "#8a9199",
           contentFontSize: 9,
           padding: [0, 0, 0, 0]
         }
@@ -188,18 +188,20 @@
     var hasFooter = !!opts.pageNumbers;
 
     var clone = sourceEl.cloneNode(true);
+    var background = opts.background || "#ffffff";
 
     clone.style.width = size.contentWidthPx + "px";
     clone.style.maxWidth = "none";
     clone.style.margin = "0";
     clone.style.padding = "0";
-    clone.style.background = "#ffffff";
 
     var host = document.createElement("div");
     host.setAttribute("data-pdf-host", "");
     host.style.cssText =
       "position:fixed;left:-100000px;top:0;z-index:-1;" +
-      "background:#ffffff;width:" +
+      "background:" +
+      background +
+      ";width:" +
       size.contentWidthPx +
       "px;";
     host.appendChild(clone);
@@ -221,7 +223,7 @@
       format: paper.format,
       pagination: true,
       marginPt: size.marginPt,
-      backgroundColor: "#ffffff",
+      backgroundColor: background,
       compress: opts.compress !== false,
       precision: 2,
       useCORS: true,

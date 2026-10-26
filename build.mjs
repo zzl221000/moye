@@ -39,6 +39,7 @@ const FILES = [
   "app.js",
   "prepare.js",
   "export-doc.js",
+  "themes.js",
   "favicon.svg",
   "THIRD-PARTY.md",
 ];

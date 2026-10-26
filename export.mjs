@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const marked = require("./vendor/marked.min.js");
+const THEMES = require("./themes.js");
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const TYPES = {
@@ -49,6 +50,9 @@ if (argv.length === 0 || argv.includes("--help") || argv.includes("-h")) {
       --paper <name>    a4 | a4-landscape | letter（默认 a4）
       --margin <pt>     页边距，单位 pt（默认 36 ≈ 12.7mm）
       --title <text>    页眉标题（默认取第一个一级标题）
+      --theme <name>    文档主题：paper | editorial | compact | dark
+      --css <file>      追加自定义 CSS 文件（作用于 .pdf-doc）
+      --background <c>  页面背景色（默认取主题）
       --no-footer       不输出页脚页码
       --no-cover        首页也显示页眉页脚
       --h1-break        每个一级标题另起一页
@@ -81,7 +85,16 @@ function getValue(name, fallback) {
 const inputArg = argv.find((arg, index) => {
   if (arg.startsWith("-")) return false;
   const previous = argv[index - 1];
-  if (previous === "-o" || previous === "--out" || previous === "--paper" || previous === "--margin" || previous === "--title") {
+  if (
+    previous === "-o" ||
+    previous === "--out" ||
+    previous === "--paper" ||
+    previous === "--margin" ||
+    previous === "--title" ||
+    previous === "--theme" ||
+    previous === "--css" ||
+    previous === "--background"
+  ) {
     return false;
   }
   return true;
@@ -106,6 +119,28 @@ const paperName = getValue("paper", "a4");
 const marginPt = Number(getValue("margin", "36"));
 const explicitTitle = getValue("title", "");
 const title = explicitTitle || firstHeading(markdown) || base;
+const themeName = getValue("theme", "paper");
+const theme = THEMES[themeName];
+
+if (!theme) {
+  console.error(
+    `未知主题：${themeName}。可选：${Object.keys(THEMES).join(" / ")}`
+  );
+  process.exit(1);
+}
+
+const cssPath = getValue("css", "");
+let customCss = "";
+if (cssPath) {
+  const resolvedCss = path.resolve(process.cwd(), cssPath);
+  if (!fs.existsSync(resolvedCss)) {
+    console.error(`找不到 CSS 文件：${resolvedCss}`);
+    process.exit(1);
+  }
+  customCss = fs.readFileSync(resolvedCss, "utf8");
+}
+
+const background = getValue("background", theme.background || "#ffffff");
 const pageNumbers = !getFlag("no-footer");
 const cover = !getFlag("no-cover");
 const h1Break = getFlag("h1-break");
@@ -122,7 +157,7 @@ function firstHeading(text) {
   return match ? match[1].replace(/[*_`~]/g, "").trim() : "";
 }
 
-function pageHtml(html) {
+function pageHtml(html, theme, customCss, background) {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -130,6 +165,8 @@ function pageHtml(html) {
 <base href="/local/">
 <title>${escapeHtml(title)}</title>
 <link rel="stylesheet" href="/styles/doc.css">
+<style id="docTheme">${theme.css}
+${customCss}</style>
 <style>
   @font-face {
     font-family: "SourceHanSansSC-Regular";
@@ -137,7 +174,7 @@ function pageHtml(html) {
     font-weight: 400;
     font-style: normal;
   }
-  html, body { margin: 0; padding: 0; background: #fff; }
+  html, body { margin: 0; padding: 0; background: ${background}; }
   #doc { padding: 0; }
 </style>
 </head>
@@ -203,7 +240,7 @@ function countPages(buffer) {
 /* ---------------------------------------------------------------- server */
 
 function startServer() {
-  const html = pageHtml(markedHtml(markdown));
+  const html = pageHtml(markedHtml(markdown), theme, customCss, background);
 
   const server = http.createServer((request, response) => {
     let pathname;
@@ -465,6 +502,9 @@ async function main() {
       cover,
       pageBreakOnH1: h1Break,
       compress,
+      background,
+      headerColor: theme.headerColor,
+      footerColor: theme.footerColor,
       metadata: {
         title,
         creator: "墨页 CLI",
@@ -505,6 +545,7 @@ async function main() {
       ).toFixed(0)} KB  ${seconds}s`
     );
     console.log(`  ${outputPath}`);
+    console.log(`  主题 ${theme.label || themeName} · 背景 ${background}`);
 
     if (getFlag("open")) openFile(outputPath);
   } finally {

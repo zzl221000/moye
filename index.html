@@ -21,6 +21,7 @@
 
     <link rel="stylesheet" href="vendor/codemirror.css" />
     <link rel="stylesheet" href="styles/doc.css" />
+    <style id="docTheme"></style>
     <link rel="stylesheet" href="styles/app.css" />
     <style>
       @font-face {
@@ -70,7 +71,7 @@
             <span class="btn-label-secondary">打开</span>
           </button>
 
-          <button class="btn btn-ghost" id="saveBtn" title="保存为 .md（Ctrl/⌘ S）">
+          <button class="btn btn-ghost" id="saveBtn" title="保存到原文件（Ctrl/⌘ S）；另存为 Ctrl/⌘ ⇧ S">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
               <polyline points="17 21 17 13 7 13 7 21" />
@@ -93,10 +94,10 @@
           <button
             class="icon-btn"
             id="settingsBtn"
-            aria-label="导出设置"
+            aria-label="设置"
             aria-expanded="false"
             aria-controls="settingsPanel"
-            title="导出设置"
+            title="设置"
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <line x1="4" y1="21" x2="4" y2="14" />
@@ -245,7 +246,7 @@
         </span>
         <span class="status-item status-file" id="statusFile">未命名.md</span>
         <span class="status-spacer"></span>
-        <span class="status-hint" id="statusHint">Ctrl/⌘ S 保存 · Ctrl/⌘ ⇧ E 导出</span>
+        <span class="status-hint" id="statusHint">Ctrl/⌘ S 保存 · ⇧S 另存为 · ⇧E 导出</span>
         <span class="status-meta">
           <span id="statPages">≈ 1 页</span>
           <span id="statWords">0 字</span>
@@ -254,9 +255,9 @@
       </footer>
     </div>
 
-    <div class="popover" id="settingsPanel" role="dialog" aria-label="导出设置" hidden>
+    <div class="popover" id="settingsPanel" role="dialog" aria-label="设置" hidden>
       <div class="popover-title">
-        <span>导出设置</span>
+        <span>设置</span>
         <button class="icon-btn" id="closeSettings" aria-label="关闭设置" style="width: 26px; height: 26px">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
             <line x1="18" y1="6" x2="6" y2="18" />
@@ -320,8 +321,50 @@
         </span>
       </label>
 
+      <div class="popover-sep"></div>
+      <div class="popover-label">文档样式</div>
+
+      <label class="field">
+        <span>主题</span>
+        <select id="optTheme"></select>
+      </label>
+
+      <label class="field">
+        <span>页面背景</span>
+        <input type="color" id="optBg" value="#ffffff" />
+      </label>
+
+      <div class="field-block">
+        <div class="field-block-head">
+          <span>细节 CSS</span>
+          <button type="button" class="text-btn" id="clearCss">清空</button>
+        </div>
+        <textarea
+          id="optCss"
+          spellcheck="false"
+          rows="6"
+          placeholder=".pdf-doc { font-size: 15px; }&#10;.pdf-doc h1 { color: #8a3b22; }"
+        ></textarea>
+        <p class="field-hint">
+          实时生效，导出时一并写入 PDF。换 <code>font-family</code> 需要额外嵌入 TTF，
+          否则中文可能缺字。
+        </p>
+      </div>
+
+      <div class="popover-sep"></div>
+      <div class="popover-label">编辑器</div>
+
+      <label class="switch-row">
+        <span>双栏同步滚动</span>
+        <span class="switch">
+          <input type="checkbox" id="optSync" checked />
+          <span aria-hidden="true"></span>
+        </span>
+      </label>
+
       <div class="popover-foot">
         <div id="fontState">中文字体：Source Han Sans SC</div>
+        <div id="fsState">文件写回：检测中…</div>
         <div>dompdf.js 在本地渲染矢量文本，文档不会上传。</div>
       </div>
     </div>
@@ -345,6 +388,7 @@
 
     <script src="prepare.js"></script>
     <script src="export-doc.js"></script>
+    <script src="themes.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
