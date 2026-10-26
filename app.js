@@ -62,6 +62,7 @@
     background: "#ffffff",
     css: "",
     sync: true,
+    editMode: "markdown",
   };
 
   var $ = function (id) {
@@ -107,6 +108,7 @@
     optTheme: $("optTheme"),
     optBg: $("optBg"),
     optCss: $("optCss"),
+    optEditMode: $("optEditMode"),
     optSync: $("optSync"),
     clearCss: $("clearCss"),
     docTheme: $("docTheme"),
@@ -142,25 +144,31 @@
 
   /* ---------------------------------------------------------------- editor */
 
-  var cm = CodeMirror(els.editorHost, {
-    value: "",
-    mode: "gfm",
-    lineWrapping: true,
-    styleActiveLine: true,
-    matchBrackets: true,
-    autoCloseBrackets: true,
-    indentUnit: 2,
-    tabSize: 2,
-    lineNumbers: false,
-    cursorBlinkRate: 530,
-    extraKeys: {
+  /* CodeMirror 5 has no rich-text mode; "markdown" here means syntax
+     highlighting of Markdown source, not rendered WYSIWYG. */
+  var MARKDOWN_MODE = {
+    name: "markdown",
+    highlightFormatting: true,
+    taskLists: true,
+    strikethrough: true,
+    emoji: true,
+    fencedCodeBlockHighlighting: true,
+    xml: true,
+  };
+
+  function plainNewline(editor) {
+    editor.replaceSelection("\n");
+  }
+
+  function makeExtraKeys(markdown) {
+    return {
       Tab: function (editor) {
         editor.replaceSelection("  ");
       },
       "Shift-Tab": function (editor) {
         editor.execCommand("indentLess");
       },
-      Enter: "newlineAndIndentContinueMarkdownList",
+      Enter: markdown ? "newlineAndIndentContinueMarkdownList" : plainNewline,
       "Ctrl-S": function () {
         saveMarkdown();
       },
@@ -173,8 +181,31 @@
       "Cmd-Shift-S": function () {
         saveMarkdown(true);
       },
-    },
+    };
+  }
+
+  var cm = CodeMirror(els.editorHost, {
+    value: "",
+    mode: options.editMode === "plain" ? null : MARKDOWN_MODE,
+    theme: "ink",
+    lineWrapping: true,
+    styleActiveLine: true,
+    matchBrackets: true,
+    autoCloseBrackets: true,
+    indentUnit: 2,
+    tabSize: 2,
+    lineNumbers: false,
+    cursorBlinkRate: 530,
+    extraKeys: makeExtraKeys(options.editMode !== "plain"),
   });
+
+  function applyEditMode() {
+    var markdown = options.editMode !== "plain";
+    cm.setOption("mode", markdown ? MARKDOWN_MODE : null);
+    cm.setOption("autoCloseBrackets", markdown);
+    cm.setOption("matchBrackets", markdown);
+    cm.setOption("extraKeys", makeExtraKeys(markdown));
+  }
 
   cm.on("change", function () {
     markDirty();
@@ -280,6 +311,7 @@
       background: els.optBg.value || "#ffffff",
       css: els.optCss.value,
       sync: els.optSync.checked,
+      editMode: els.optEditMode.value === "plain" ? "plain" : "markdown",
     };
   }
 
@@ -292,6 +324,7 @@
     els.optH1Break.checked = !!options.h1Break;
     els.optCompress.checked = !!options.compress;
     els.optSync.checked = options.sync !== false;
+    els.optEditMode.value = options.editMode === "plain" ? "plain" : "markdown";
     els.optBg.value = options.background || "#ffffff";
     els.optCss.value = options.css || "";
 
@@ -1099,6 +1132,12 @@
     els.optCss.focus();
   });
 
+  els.optEditMode.addEventListener("change", function () {
+    options = readOptionsFromControls();
+    applyEditMode();
+    saveOptions();
+  });
+
   els.optSync.addEventListener("change", function () {
     options = readOptionsFromControls();
     saveOptions();
@@ -1324,6 +1363,7 @@
   (function boot() {
     populateThemes();
     writeOptionsToControls();
+    applyEditMode();
     applyPaperMetrics();
     applyDocumentStyles();
     refreshFsState();
@@ -1382,6 +1422,15 @@
     },
     isDirty: function () {
       return dirty;
+    },
+    getEditMode: function () {
+      return options.editMode;
+    },
+    setEditMode: function (mode) {
+      els.optEditMode.value = mode === "plain" ? "plain" : "markdown";
+      options = readOptionsFromControls();
+      applyEditMode();
+      saveOptions();
     },
     sample: SAMPLE,
   };

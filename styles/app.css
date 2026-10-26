@@ -511,8 +511,18 @@ body {
   color: #8a5a2b;
 }
 
-.cm-s-ink .cm-variable-2 {
+.cm-s-ink .cm-variable-2,
+.cm-s-ink .cm-variable-3,
+.cm-s-ink .cm-keyword {
   color: #4d565f;
+}
+
+.cm-s-ink .cm-strikethrough {
+  text-decoration: line-through;
+}
+
+.cm-s-ink .cm-builtin {
+  color: var(--accent);
 }
 
 .cm-s-ink .cm-hr {
