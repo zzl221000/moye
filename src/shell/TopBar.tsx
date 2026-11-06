@@ -6,6 +6,9 @@ type TopBarProps = {
   onOpen: () => void;
   onSave: () => void;
   onExport: () => void;
+  onSettings: () => void;
+  onSettingsButton: (button: HTMLButtonElement) => void;
+  settingsOpen: boolean;
   exporting: boolean;
   exportError?: string | null;
 };
@@ -59,7 +62,18 @@ export default function TopBar(props: TopBarProps) {
           <span class="btn__label">导出 PDF</span>
         </button>
 
-        <button class="btn btn--icon" type="button" aria-label="设置" title="设置">
+        <button
+          class="btn btn--icon"
+          type="button"
+          data-action="settings"
+          aria-label="设置"
+          title="设置"
+          aria-haspopup="dialog"
+          aria-controls="settings-dialog"
+          aria-expanded={props.settingsOpen ? "true" : "false"}
+          ref={(button) => props.onSettingsButton(button)}
+          onClick={props.onSettings}
+        >
           <SettingsIcon />
         </button>
       </div>

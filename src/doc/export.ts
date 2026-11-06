@@ -1,3 +1,4 @@
+import type { DocumentExportSettings } from "./options";
 import { createExportArticle } from "./render";
 import type { ExportDocument } from "./render";
 import { ensureExportRuntime, loadFontBytes } from "./runtime";
@@ -17,6 +18,7 @@ export type PdfExportResult = {
  */
 export async function exportDocumentToPdf(
   document: ExportDocument,
+  settings: DocumentExportSettings,
 ): Promise<PdfExportResult> {
   const [fontBytes] = await Promise.all([loadFontBytes(), ensureExportRuntime()]);
 
@@ -25,19 +27,19 @@ export async function exportDocumentToPdf(
     throw new Error("导出内核未加载");
   }
 
-  const title = document.title || "未命名";
+  const title = settings.headerTitle || document.title || "未命名";
   const article = createExportArticle(document.html);
 
   let pages = 0;
   const blob = await api.exportElement(article, {
-    paper: "a4",
-    marginPt: 36,
-    headerTitle: title,
-    pageNumbers: true,
-    cover: true,
-    pageBreakOnH1: false,
-    compress: true,
-    background: document.background,
+    paper: settings.paper,
+    marginPt: settings.marginPt,
+    headerTitle: settings.headerTitle,
+    pageNumbers: settings.pageNumbers,
+    cover: settings.cover,
+    pageBreakOnH1: settings.pageBreakOnH1,
+    compress: settings.compress,
+    background: settings.background,
     headerColor: document.headerColor,
     footerColor: document.footerColor,
     fontBytes,
@@ -58,7 +60,7 @@ export async function exportDocumentToPdf(
     pages = await api.countPages(blob);
   }
 
-  const fileName = pdfFileName(title);
+  const fileName = pdfFileName(document.title || "未命名");
   downloadBlob(blob, fileName);
   return { blob, pages, fileName };
 }

@@ -45,6 +45,36 @@ interface MoyeSmokeHook {
   focus(): void;
 }
 
+/** Development-only view of the settings model for the headless smoke. */
+interface MoyeSettingsSnapshot {
+  paper: string;
+  margin: string;
+  headerTitle: string;
+  pageNumbers: boolean;
+  cover: boolean;
+  pageBreakOnH1: boolean;
+  theme: string;
+  background: string;
+  customCss: string;
+  compress: boolean;
+}
+
+interface MoyeExportSettingsSnapshot {
+  paper: string;
+  marginPt: number;
+  headerTitle: string;
+  pageNumbers: boolean;
+  cover: boolean;
+  pageBreakOnH1: boolean;
+  compress: boolean;
+  background: string;
+}
+
+interface MoyeSettingsHook {
+  getOptions(): MoyeSettingsSnapshot;
+  getExportSettings(): MoyeExportSettingsSnapshot;
+}
+
 interface Window {
   showOpenFilePicker?(
     options?: FilePickerOptions,
@@ -53,4 +83,5 @@ interface Window {
     options?: SaveFilePickerOptions,
   ): Promise<FileSystemFileHandle>;
   __moye?: MoyeSmokeHook;
+  __moyeSettings?: MoyeSettingsHook;
 }

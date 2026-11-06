@@ -116,6 +116,24 @@ export function SettingsIcon(props: IconProps) {
   );
 }
 
+export function CloseIcon(props: IconProps) {
+  const size = () => props.size ?? 15;
+  return (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      aria-hidden="true"
+    >
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
 export function LinkIcon(props: IconProps) {
   const size = () => props.size ?? 18;
   return (
