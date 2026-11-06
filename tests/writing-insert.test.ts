@@ -10,13 +10,71 @@ import {
 } from "../src/writing/insert";
 
 describe("table insertion plan", () => {
-  it("inserts a GFM table with a header, separator and two rows", () => {
+  it("defaults to three columns and two body rows", () => {
     const plan = buildTableInsertion({ before: "", after: "", selected: "" });
 
     expect(plan.text).toBe(
-      ["| 列 1 | 列 2 |", "| --- | --- |", "|  |  |", "|  |  |"].join("\n"),
+      [
+        "| 列 1 | 列 2 | 列 3 |",
+        "| --- | --- | --- |",
+        "|  |  |  |",
+        "|  |  |  |",
+      ].join("\n"),
     );
     expect(plan.text.slice(plan.selection.from, plan.selection.to)).toBe("列 1");
+  });
+
+  it("builds the chosen shape with one header, separator and body row each", () => {
+    const plan = buildTableInsertion(
+      { before: "", after: "", selected: "" },
+      4,
+      3,
+    );
+    const lines = plan.text.split("\n");
+
+    expect(lines).toHaveLength(5);
+    expect(lines[0]).toBe("| 列 1 | 列 2 | 列 3 | 列 4 |");
+    expect(lines[1]).toBe("| --- | --- | --- | --- |");
+    expect(lines.slice(2)).toEqual([
+      "|  |  |  |  |",
+      "|  |  |  |  |",
+      "|  |  |  |  |",
+    ]);
+    expect(plan.text.slice(plan.selection.from, plan.selection.to)).toBe("列 1");
+  });
+
+  it("clamps both directions to one through eight", () => {
+    const small = buildTableInsertion(
+      { before: "", after: "", selected: "" },
+      0,
+      0,
+    );
+    const large = buildTableInsertion(
+      { before: "", after: "", selected: "" },
+      99,
+      99,
+    );
+
+    expect(small.text).toBe("| 列 1 |\n| --- |\n|  |");
+    expect(large.text.split("\n")).toHaveLength(10);
+    expect(large.text.split("\n")[0]).toBe(
+      "| 列 1 | 列 2 | 列 3 | 列 4 | 列 5 | 列 6 | 列 7 | 列 8 |",
+    );
+    const emptyRows = large.text
+      .split("\n")
+      .filter((line) => line === "|  |  |  |  |  |  |  |  |");
+    expect(emptyRows).toHaveLength(8);
+  });
+
+  it("keeps the first header label selected for immediate renaming", () => {
+    const plan = buildTableInsertion(
+      { before: "前文", after: "后文", selected: "" },
+      5,
+      4,
+    );
+
+    expect(plan.text.slice(plan.selection.from, plan.selection.to)).toBe("列 1");
+    expect(plan.text.indexOf("列 1")).toBe(plan.selection.from);
   });
 
   it("replaces a non-empty selection and separates it from surrounding prose", () => {

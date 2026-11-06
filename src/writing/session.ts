@@ -1,4 +1,5 @@
 import { createMsfeEditor, type MsfeEditor } from "@quirekit/msfe-core";
+import { getProseStructure, type ProseStructure } from "@quirekit/msfe-prose";
 import { StarterKit } from "@quirekit/msfe-starter-kit";
 import {
   browserDraftStorage,
@@ -30,6 +31,8 @@ import {
   MAX_INLINE_IMAGE_BYTES,
   planImageInsertion,
   PLACEHOLDER_IMAGE,
+  TABLE_DEFAULT_COLUMNS,
+  TABLE_DEFAULT_ROWS,
   type ImageInsertion,
   type InsertionContext,
   type InsertionPlan,
@@ -60,6 +63,15 @@ export interface WritingSessionOptions {
 
 /** Debounce for automatic draft writes, in milliseconds. */
 export const DRAFT_DEBOUNCE_MS = 600;
+
+/** Structure reported while no editor is mounted. */
+const NO_STRUCTURE: ProseStructure = {
+  table: false,
+  deleteRow: false,
+  deleteColumn: false,
+  list: false,
+  indentList: false,
+};
 
 const OPEN_FILE_TYPES: FilePickerOptions = {
   multiple: false,
@@ -281,12 +293,75 @@ export class WritingSession {
     }
   }
 
-  /** Inserts a GFM table template, replacing a non-empty selection. */
-  insertTable(): boolean {
+  /** Inserts a GFM table of the chosen shape, replacing a non-empty selection. */
+  insertTable(
+    columns = TABLE_DEFAULT_COLUMNS,
+    rows = TABLE_DEFAULT_ROWS,
+  ): boolean {
     const context = this.insertionContext();
     return context !== null
-      ? this.applyInsertion(buildTableInsertion(context))
+      ? this.applyInsertion(buildTableInsertion(context, columns, rows))
       : false;
+  }
+
+  /** Inserts an empty column after the cell holding the caret. */
+  insertTableColumn(): boolean {
+    return this.applyTableCommand((editor) =>
+      editor.commands.insertTableColumn("after"),
+    );
+  }
+
+  /** Inserts an empty row below the row holding the caret. */
+  insertTableRow(): boolean {
+    return this.applyTableCommand((editor) =>
+      editor.commands.insertTableRow("after"),
+    );
+  }
+
+  /** Removes the column holding the caret, refusing the last remaining one. */
+  deleteTableColumn(): boolean {
+    return this.applyTableCommand((editor) =>
+      editor.commands.deleteTableColumn(),
+    );
+  }
+
+  /** Removes the body row holding the caret; the header row is structural. */
+  deleteTableRow(): boolean {
+    return this.applyTableCommand((editor) =>
+      editor.commands.deleteTableRow(),
+    );
+  }
+
+  /** @returns Table/list facts at the current selection. */
+  structure(): ProseStructure {
+    const editor = this.editor;
+    if (!editor || this.destroyed) return NO_STRUCTURE;
+    return getProseStructure(editor.state);
+  }
+
+  /**
+   * Observes structural context for the insert bar. Source edits arrive through
+   * `onChange`, but caret-only moves do not, so native `selectionchange` is
+   * coalesced to one refresh per animation frame.
+   */
+  observeStructure(listener: (structure: ProseStructure) => void): () => void {
+    let frame: number | null = null;
+    const update = (): void => {
+      if (frame !== null) return;
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        if (!this.destroyed) listener(this.structure());
+      });
+    };
+    // `selectionchange` is dispatched on the document, not the content host.
+    document.addEventListener("selectionchange", update);
+    const unsubscribe = this.editor?.onChange(update) ?? null;
+    listener(this.structure());
+    return () => {
+      document.removeEventListener("selectionchange", update);
+      unsubscribe?.();
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
   }
 
   /** Wraps the selection in a fenced block, or inserts an empty fence. */
@@ -393,6 +468,30 @@ export class WritingSession {
       console.error("[moye] 插入失败", result.reason);
       return false;
     }
+    editor.focus();
+    return true;
+  }
+
+  /**
+   * Runs one installed table command. Disabled commands reject without a
+   * diagnostic, matching their contextual button. After a successful edit the
+   * source is re-read so the preview and status bar never trail the command.
+   */
+  private applyTableCommand(
+    command: (editor: MsfeEditor) => boolean,
+  ): boolean {
+    const editor = this.editor;
+    if (!editor || this.destroyed) return false;
+    try {
+      if (!command(editor)) return false;
+    } catch (error) {
+      console.error("[moye] 表格操作失败", error);
+      return false;
+    }
+    this.markdown = editor.getMarkdown();
+    this.saveState = "dirty";
+    this.emit();
+    this.scheduleDraft();
     editor.focus();
     return true;
   }

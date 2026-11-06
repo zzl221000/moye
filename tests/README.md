@@ -16,7 +16,7 @@ bun run smoke:writing
 MOYE_SMOKE_SCREENSHOT=writing.png MOYE_SMOKE_SCREENSHOT_EMPTY=empty.png bun run smoke:writing
 ```
 
-脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影与右侧版式预览，然后拖动分隔条并断言比例写入 `localStorage`；接着用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，确认顶栏文件名可编辑，再用 `Ctrl+Shift+E` 触发导出并检查进度条与下载的 PDF；键入 `中文 ABC 123` 后等待草稿写入，刷新页面并断言 `getMarkdown()`、文件名与分栏比例都恢复；最后键入一份长文档，断言预览出现新标题、状态栏字数增长且页卡页数与状态栏精确页数一致；再载入 `long.md` 记录一次重新分页耗时，并临时移除 `collectSnapshotData` 验证回退到连续预览与 `≈` 页数，恢复后再确认重新分页。窗口改为 800px 宽时还会断言写作面在上、预览在下、分隔条隐藏。插入按钮的检查（链接、图片、表格、代码块的标准 Markdown、链接对话框的 Enter/Escape 与焦点回归、表格替换选区、代码块包裹选区）也在同一脚本内。
+脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影与右侧版式预览，然后拖动分隔条并断言比例写入 `localStorage`；接着用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，确认顶栏文件名可编辑，再用 `Ctrl+Shift+E` 触发导出并检查进度条与下载的 PDF；键入 `中文 ABC 123` 后等待草稿写入，刷新页面并断言 `getMarkdown()`、文件名与分栏比例都恢复；最后键入一份长文档，断言预览出现新标题、状态栏字数增长且页卡页数与状态栏精确页数一致；再载入 `long.md` 记录一次重新分页耗时，并临时移除 `collectSnapshotData` 验证回退到连续预览与 `≈` 页数，恢复后再确认重新分页。窗口改为 800px 宽时还会断言写作面在上、预览在下、分隔条隐藏。插入按钮的检查（链接、图片、表格尺寸网格与 4×3 插入、表格内加列/加行/删列/删行、代码块的标准 Markdown、链接对话框的 Enter/Escape 与焦点回归、表格替换选区、代码块包裹选区）也在同一脚本内。
 
 前置条件：
 

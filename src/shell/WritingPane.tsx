@@ -1,4 +1,4 @@
-import { onSettled, Show } from "solid-js";
+import { createSignal, onSettled, Show } from "solid-js";
 import {
   WritingSession,
   type WritingState,
@@ -14,7 +14,7 @@ export interface WritingPaneProps {
 
 export default function WritingPane(props: WritingPaneProps) {
   let host: HTMLDivElement | undefined;
-  let session: WritingSession | undefined;
+  const [session, setSession] = createSignal<WritingSession | null>(null);
 
   onSettled(() => {
     const parent = host;
@@ -24,12 +24,12 @@ export default function WritingPane(props: WritingPaneProps) {
       onState: props.onState,
       onExport: props.onExport,
     });
-    session = created;
+    setSession(created);
     props.onReady(created);
     return () => {
       props.onReady(null);
+      setSession(null);
       created.destroy();
-      session = undefined;
     };
   });
 
@@ -41,7 +41,7 @@ export default function WritingPane(props: WritingPaneProps) {
       aria-label="写作面"
     >
       <Show when={props.hasDocument}>
-        <InsertBar session={() => session ?? null} />
+        <InsertBar session={session} />
       </Show>
 
       <div class="writing-surface">
@@ -54,7 +54,7 @@ export default function WritingPane(props: WritingPaneProps) {
                 class="btn writing-empty__action"
                 type="button"
                 onClick={() => {
-                  void session?.open();
+                  void session()?.open();
                 }}
               >
                 打开文件
@@ -63,7 +63,7 @@ export default function WritingPane(props: WritingPaneProps) {
                 class="btn writing-empty__action"
                 type="button"
                 onClick={() => {
-                  session?.loadSample();
+                  session()?.loadSample();
                 }}
               >
                 载入示例
