@@ -1,7 +1,16 @@
-import { createSignal } from "solid-js";
-import MIXED_MARKDOWN from "../tests/fixtures/mixed.md?raw";
+import { createEffect, createMemo, createSignal } from "solid-js";
 import { exportDocumentToPdf } from "./doc/export";
 import { renderExportDocument } from "./doc/render";
+import {
+  browserSplitStorage,
+  clampSplit,
+  readSplit,
+  SPLIT_PERCENT_MAX,
+  SPLIT_PERCENT_MIN,
+  SPLIT_STEP,
+  writeSplit,
+} from "./shell/split";
+import { countCharacters } from "./writing/count";
 import { browserDraftStorage, readDraft } from "./writing/draft";
 import { FALLBACK_FILE_NAME } from "./writing/filename";
 import type { WritingSession, WritingState } from "./writing/session";
@@ -17,6 +26,9 @@ const INITIAL_STATE: WritingState = {
   hasDocument: false,
 };
 
+/** Preview refresh delay after a keystroke, in milliseconds. */
+export const PREVIEW_DEBOUNCE_MS = 150;
+
 function initialWritingState(): WritingState {
   const draft = readDraft(browserDraftStorage());
   if (!draft) return INITIAL_STATE;
@@ -28,26 +40,93 @@ function initialWritingState(): WritingState {
   };
 }
 
+type SplitDrag = {
+  readonly pointerId: number;
+  readonly startX: number;
+  readonly startSplit: number;
+  /** Width the two panes share, excluding the separator itself. */
+  readonly span: number;
+};
+
 export default function App() {
-  // Ticket 04: one fixed document, rendered through the shared pure seam.
-  const [previewDocument] = createSignal(renderExportDocument(MIXED_MARKDOWN));
+  const initial = initialWritingState();
+  const splitStorage = browserSplitStorage();
+
+  const [docState, setDocState] = createSignal<WritingState>(initial);
+  const [previewMarkdown, setPreviewMarkdown] = createSignal(initial.markdown);
+  const previewDocument = createMemo(() =>
+    renderExportDocument(previewMarkdown()),
+  );
+  const [pages, setPages] = createSignal(0);
+  const [split, setSplit] = createSignal(readSplit(splitStorage));
+  const [resizing, setResizing] = createSignal(false);
   const [exporting, setExporting] = createSignal(false);
   const [exportError, setExportError] = createSignal<string | null>(null);
 
-  const [docState, setDocState] = createSignal<WritingState>(
-    initialWritingState(),
-  );
   let session: WritingSession | null = null;
+  let drag: SplitDrag | null = null;
 
-  const words = () =>
-    Array.from(docState().markdown.replace(/\s/gu, "")).length;
+  // The preview follows the document, but not on every keystroke: rendering
+  // and sanitizing a long document synchronously would stall typing.
+  createEffect(
+    () => ({
+      markdown: docState().markdown,
+      preview: previewMarkdown(),
+    }),
+    ({ markdown, preview }) => {
+      if (markdown === preview) return;
+      const timer = setTimeout(() => {
+        setPreviewMarkdown(markdown);
+      }, PREVIEW_DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    },
+  );
+
+  // Keep the resize cursor while a pointer drag is captured by the handle.
+  createEffect(
+    () => resizing(),
+    (active) => {
+      document.body.classList.toggle("is-resizing", active);
+      return () => document.body.classList.remove("is-resizing");
+    },
+  );
+
+  function commitSplit(value: number): void {
+    const next = clampSplit(value);
+    setSplit(next);
+    writeSplit(splitStorage, next);
+  }
+
+  function handleSplitterKeyDown(event: KeyboardEvent): void {
+    let next: number;
+    switch (event.key) {
+      case "ArrowLeft":
+        next = split() - SPLIT_STEP;
+        break;
+      case "ArrowRight":
+        next = split() + SPLIT_STEP;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    commitSplit(next);
+  }
 
   async function handleExport(): Promise<void> {
-    if (exporting()) return;
+    if (exporting() || !docState().hasDocument) return;
     setExporting(true);
     setExportError(null);
     try {
-      await exportDocumentToPdf(previewDocument());
+      // Export the newest Markdown, not the possibly debounced preview, so a
+      // quick Ctrl+Shift+E can never ship the previous keystroke.
+      await exportDocumentToPdf(renderExportDocument(docState().markdown));
     } catch (error) {
       console.error(error);
       setExportError(error instanceof Error ? error.message : "导出失败");
@@ -63,6 +142,7 @@ export default function App() {
       <div class="app-shell">
         <TopBar
           fileName={docState().name}
+          canExport={docState().hasDocument}
           onOpen={() => {
             void session?.open();
           }}
@@ -74,7 +154,14 @@ export default function App() {
           exportError={exportError()}
         />
 
-        <main class="workspace" aria-label="工作区">
+        <main
+          class={`workspace${resizing() ? " workspace--resizing" : ""}`}
+          aria-label="工作区"
+          style={{
+            "--moye-split-writing": `${split()}fr`,
+            "--moye-split-preview": `${1 - split()}fr`,
+          }}
+        >
           <WritingPane
             hasDocument={docState().hasDocument}
             onState={(state) => {
@@ -84,14 +171,67 @@ export default function App() {
               session = created;
             }}
           />
-          <div class="workspace__splitter" aria-hidden="true" />
-          <PreviewPane document={previewDocument()} />
+
+          <div
+            class="workspace__splitter"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="调整写作面与版式预览宽度"
+            aria-controls="writing-pane preview-pane"
+            aria-valuemin={SPLIT_PERCENT_MIN}
+            aria-valuemax={SPLIT_PERCENT_MAX}
+            aria-valuenow={Math.round(split() * 100)}
+            aria-valuetext={`写作面 ${Math.round(split() * 100)}%，版式预览 ${Math.round((1 - split()) * 100)}%`}
+            tabindex="0"
+            onKeyDown={(event) => handleSplitterKeyDown(event)}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              const workspace = event.currentTarget.parentElement;
+              if (!workspace) return;
+              const span =
+                workspace.getBoundingClientRect().width -
+                event.currentTarget.getBoundingClientRect().width;
+              if (span <= 0) return;
+              drag = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startSplit: split(),
+                span,
+              };
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setResizing(true);
+              event.preventDefault();
+            }}
+            onPointerMove={(event) => {
+              const current = drag;
+              if (!current || current.pointerId !== event.pointerId) return;
+              const delta = (event.clientX - current.startX) / current.span;
+              setSplit(clampSplit(current.startSplit + delta));
+            }}
+            onPointerUp={(event) => {
+              if (!drag || drag.pointerId !== event.pointerId) return;
+              drag = null;
+              setResizing(false);
+              writeSplit(splitStorage, split());
+            }}
+            onPointerCancel={() => {
+              if (!drag) return;
+              drag = null;
+              setResizing(false);
+              writeSplit(splitStorage, split());
+            }}
+          />
+
+          <PreviewPane
+            document={previewDocument()}
+            onPageEstimate={(count) => setPages(count)}
+          />
         </main>
 
         <StatusBar
           fileName={docState().name}
-          words={words()}
-          pages={0}
+          characters={countCharacters(docState().markdown)}
+          pages={pages()}
           saveState={docState().saveState}
         />
       </div>

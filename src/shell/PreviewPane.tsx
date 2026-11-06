@@ -1,9 +1,11 @@
 import { createEffect, createSignal } from "solid-js";
-import type { ExportDocument } from "../doc/render";
+import { estimatePageCount } from "../doc/page-estimate";
 import { A4_PREVIEW } from "../doc/paper";
+import type { ExportDocument } from "../doc/render";
 
 type PreviewPaneProps = {
   document: ExportDocument;
+  onPageEstimate: (pages: number) => void;
 };
 
 /**
@@ -13,6 +15,7 @@ type PreviewPaneProps = {
  */
 export default function PreviewPane(props: PreviewPaneProps) {
   const [stack, setStack] = createSignal<HTMLDivElement>();
+  const [content, setContent] = createSignal<HTMLDivElement>();
   const [zoom, setZoom] = createSignal(1);
 
   createEffect(
@@ -36,8 +39,39 @@ export default function PreviewPane(props: PreviewPaneProps) {
     },
   );
 
+  // The sheet is scaled with CSS zoom, so the content box's client rect is in
+  // screen pixels. Dividing by the zoom recovers the layout height that must be
+  // compared with one page's printable height in `estimatePageCount`.
+  createEffect(
+    () => ({ element: content(), document: props.document, scale: zoom() }),
+    ({ element, scale }) => {
+      if (!element) {
+        props.onPageEstimate(0);
+        return;
+      }
+
+      const measure = (): void => {
+        const height = element.getBoundingClientRect().height;
+        const layoutHeight = scale > 0 ? height / scale : height;
+        props.onPageEstimate(estimatePageCount(layoutHeight));
+      };
+
+      measure();
+
+      if (typeof ResizeObserver === "undefined") return;
+      const observer = new ResizeObserver(measure);
+      observer.observe(element);
+      return () => observer.disconnect();
+    },
+  );
+
   return (
-    <section class="preview-pane" data-region="preview" aria-label="版式预览">
+    <section
+      id="preview-pane"
+      class="preview-pane"
+      data-region="preview"
+      aria-label="版式预览"
+    >
       <div class="preview-stack" ref={(element) => setStack(element)}>
         <div
           class="preview-paper"
@@ -46,7 +80,11 @@ export default function PreviewPane(props: PreviewPaneProps) {
             "--moye-preview-zoom": String(zoom()),
           }}
         >
-          <div class="preview-paper__content" innerHTML={props.document.html} />
+          <div
+            class="preview-paper__content"
+            ref={(element) => setContent(element)}
+            innerHTML={props.document.html}
+          />
         </div>
       </div>
     </section>

@@ -2,6 +2,7 @@ import { BrandMark, ExportIcon, OpenIcon, SaveIcon, SettingsIcon } from "./icons
 
 type TopBarProps = {
   fileName: string;
+  canExport: boolean;
   onOpen: () => void;
   onSave: () => void;
   onExport: () => void;
@@ -51,7 +52,7 @@ export default function TopBar(props: TopBarProps) {
           title={props.exportError ?? "导出 PDF"}
           data-action="export"
           aria-busy={props.exporting ? "true" : "false"}
-          disabled={props.exporting}
+          disabled={props.exporting || !props.canExport}
           onClick={() => props.onExport()}
         >
           <ExportIcon />
