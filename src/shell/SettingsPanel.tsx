@@ -103,8 +103,10 @@ export default function SettingsPanel(props: SettingsPanelProps) {
               纸张
             </h3>
 
-            <label class="settings-field" for="setting-paper">
-              <span class="settings-field__label">纸张</span>
+            <div class="settings-field">
+              <label class="settings-field__label" for="setting-paper">
+                纸张
+              </label>
               <select
                 class="settings-control"
                 id="setting-paper"
@@ -121,10 +123,12 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                   )}
                 </For>
               </select>
-            </label>
+            </div>
 
-            <label class="settings-field" for="setting-margin">
-              <span class="settings-field__label">页边距</span>
+            <div class="settings-field">
+              <label class="settings-field__label" for="setting-margin">
+                页边距
+              </label>
               <select
                 class="settings-control"
                 id="setting-margin"
@@ -142,7 +146,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                   )}
                 </For>
               </select>
-            </label>
+            </div>
           </section>
 
           <section
@@ -153,8 +157,10 @@ export default function SettingsPanel(props: SettingsPanelProps) {
               版式
             </h3>
 
-            <label class="settings-field" for="setting-header-title">
-              <span class="settings-field__label">页眉标题</span>
+            <div class="settings-field">
+              <label class="settings-field__label" for="setting-header-title">
+                页眉标题
+              </label>
               <input
                 class="settings-control"
                 id="setting-header-title"
@@ -166,7 +172,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                   props.onChange({ headerTitle: event.currentTarget.value });
                 }}
               />
-            </label>
+            </div>
 
             <label class="settings-switch">
               <span class="settings-switch__label">页脚页码</span>
@@ -226,8 +232,10 @@ export default function SettingsPanel(props: SettingsPanelProps) {
               文档
             </h3>
 
-            <label class="settings-field" for="setting-theme">
-              <span class="settings-field__label">文档主题</span>
+            <div class="settings-field">
+              <label class="settings-field__label" for="setting-theme">
+                文档主题
+              </label>
               <select
                 class="settings-control"
                 id="setting-theme"
@@ -243,10 +251,12 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                   )}
                 </For>
               </select>
-            </label>
+            </div>
 
-            <label class="settings-field" for="setting-background">
-              <span class="settings-field__label">页面背景</span>
+            <div class="settings-field">
+              <label class="settings-field__label" for="setting-background">
+                页面背景
+              </label>
               <input
                 class="settings-color"
                 id="setting-background"
@@ -256,7 +266,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                   props.onChange({ background: event.currentTarget.value });
                 }}
               />
-            </label>
+            </div>
 
             <details class="settings-advanced">
               <summary class="settings-advanced__summary">高级</summary>
@@ -265,8 +275,10 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                   Detail CSS is appended after the theme CSS and reaches both
                   the preview and the PDF; it is not a sandboxed stylesheet.
                 */}
-                <label class="settings-field" for="setting-custom-css">
-                  <span class="settings-field__label">细节 CSS</span>
+                <div class="settings-field">
+                  <label class="settings-field__label" for="setting-custom-css">
+                    细节 CSS
+                  </label>
                   <textarea
                     class="settings-control settings-code"
                     id="setting-custom-css"
@@ -279,7 +291,7 @@ export default function SettingsPanel(props: SettingsPanelProps) {
                       });
                     }}
                   />
-                </label>
+                </div>
               </div>
             </details>
 

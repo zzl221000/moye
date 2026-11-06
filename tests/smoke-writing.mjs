@@ -306,6 +306,42 @@ async function main() {
       "写作面加载",
     );
 
+    // The first screen is the empty writing surface: two actions, no prose.
+    const emptyState = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const empty = document.querySelector(".writing-empty");
+        const pane = document.querySelector('[data-region="writing"]');
+        if (!empty || !pane) return null;
+        return {
+          actions: [...empty.querySelectorAll("button")].map((button) => ({
+            text: button.textContent?.trim() ?? "",
+            name: button.getAttribute("aria-label") || button.textContent?.trim() || "",
+          })),
+          children: [...empty.children].map((element) => element.tagName),
+          text: empty.textContent?.replace(/\\s+/g, "") ?? "",
+          prose: empty.querySelectorAll("p, h1, h2, h3, h4, h5, h6, ul, ol, dl, small, em").length,
+          bar: Boolean(document.querySelector(".writing-bar")),
+          hostHidden: document.querySelector(".writing-host")?.hasAttribute("hidden") ?? false,
+        };
+      })()`,
+    );
+    if (
+      !emptyState ||
+      emptyState.actions.length !== 2 ||
+      emptyState.actions.map((action) => action.text).join("|") !==
+        "打开文件|载入示例" ||
+      emptyState.actions.some((action) => !action.name) ||
+      emptyState.children.some((tag) => tag !== "BUTTON") ||
+      emptyState.text !== "打开文件载入示例" ||
+      emptyState.prose !== 0 ||
+      emptyState.bar ||
+      !emptyState.hostHidden
+    ) {
+      throw new Error(`空写作面不是两个动作：${JSON.stringify(emptyState)}`);
+    }
+
     const emptyScreenshotPath = process.env.MOYE_SMOKE_SCREENSHOT_EMPTY;
     if (emptyScreenshotPath) {
       await cdp.send("Page.enable", {}, sessionId);
@@ -842,6 +878,35 @@ async function main() {
       throw new Error(`插入按钮的可访问名称不对：${JSON.stringify(controls)}`);
     }
 
+    // Every form control outside the user's document projection carries a
+    // name, including the MSFE code-language select and task checkboxes.
+    const unnamedControls = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const hasName = (element) => {
+          if (element.getAttribute("aria-label")?.trim()) return true;
+          if (element.getAttribute("aria-labelledby")?.trim()) return true;
+          if (element.labels?.length) {
+            return [...element.labels].some((label) => label.textContent?.trim());
+          }
+          return Boolean(element.closest("label")?.textContent?.trim());
+        };
+        return [...document.querySelectorAll("input, select, textarea")]
+          .filter((element) => !element.closest(".preview-paper__content"))
+          .filter((element) => !hasName(element))
+          .map((element) => ({
+            tag: element.tagName,
+            type: element.type,
+            id: element.id,
+            className: element.className,
+          }));
+      })()`,
+    );
+    if (unnamedControls.length !== 0) {
+      throw new Error(`存在没有标签的表单控件：${JSON.stringify(unnamedControls)}`);
+    }
+
     const resetWritingSurface = async () => {
       await evaluate(cdp, sessionId, `window.__moye.replace("")`);
       await evaluate(cdp, sessionId, "window.__moye.focus()");
@@ -856,16 +921,76 @@ async function main() {
 
     await resetWritingSurface();
     await clickInsert("插入链接");
-    await waitFor(
-      async () => evaluate(cdp, sessionId, `Boolean(document.querySelector('dialog[open]'))`),
+    const linkDialogState = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const dialog = document.querySelector("#insert-link-dialog");
+            const input = document.querySelector("#insert-link-url");
+            const trigger = document.querySelector('button[aria-label="插入链接"]');
+            return {
+              open: Boolean(dialog?.open),
+              focused: document.activeElement === input,
+              expanded: trigger?.getAttribute("aria-expanded"),
+              haspopup: trigger?.getAttribute("aria-haspopup"),
+              controls: trigger?.getAttribute("aria-controls"),
+            };
+          })()`,
+        );
+        return state.open && state.focused ? state : null;
+      },
       5_000,
-      "链接对话框",
+      "链接对话框初始焦点",
     );
-    await evaluate(
-      cdp,
-      sessionId,
-      `document.querySelector("dialog[open] input")?.focus()`,
+    if (
+      linkDialogState.expanded !== "true" ||
+      linkDialogState.haspopup !== "dialog" ||
+      linkDialogState.controls !== "insert-link-dialog"
+    ) {
+      throw new Error(`链接对话框的触发按钮状态不对：${JSON.stringify(linkDialogState)}`);
+    }
+
+    // Empty submit is the error state: one sentence, no prose, field marked.
+    await pressEnter(cdp, sessionId);
+    const linkError = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const error = document.querySelector("#insert-link-error");
+            const input = document.querySelector("#insert-link-url");
+            return error ? {
+              text: error.textContent?.trim() ?? "",
+              invalid: input?.getAttribute("aria-invalid"),
+              describedBy: input?.getAttribute("aria-describedby"),
+              focused: document.activeElement === input,
+            } : null;
+          })()`,
+        );
+        return state?.text ? state : null;
+      },
+      5_000,
+      "链接地址为空时的错误",
     );
+    if (
+      linkError.text !== "请输入链接地址" ||
+      linkError.invalid !== "true" ||
+      linkError.describedBy !== "insert-link-error" ||
+      !linkError.focused
+    ) {
+      throw new Error(`链接错误提示不对：${JSON.stringify(linkError)}`);
+    }
+    if (
+      linkError.text.length > 24 ||
+      /[。！？]/.test(linkError.text) ||
+      /(?:支持|功能|说明|提示)/.test(linkError.text)
+    ) {
+      throw new Error(`链接错误提示不是一句可行动的说明：${linkError.text}`);
+    }
+
     await cdp.send(
       "Input.insertText",
       { text: "https://example.com" },
@@ -897,18 +1022,22 @@ async function main() {
       "链接插入后焦点回到写作面",
     );
 
-    // Escape cancels without writing anything and also returns focus.
+    // Escape cancels without writing anything and returns focus to the trigger.
     await resetWritingSurface();
     await clickInsert("插入链接");
     await waitFor(
-      async () => evaluate(cdp, sessionId, `Boolean(document.querySelector('dialog[open]'))`),
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const dialog = document.querySelector("#insert-link-dialog");
+            const input = document.querySelector("#insert-link-url");
+            return Boolean(dialog?.open) && document.activeElement === input;
+          })()`,
+        ),
       5_000,
       "链接对话框（取消）",
-    );
-    await evaluate(
-      cdp,
-      sessionId,
-      `document.querySelector("dialog[open] input")?.focus()`,
     );
     await cdp.send("Input.insertText", { text: "https://cancelled.example" }, sessionId);
     await pressEscape(cdp, sessionId);
@@ -925,10 +1054,14 @@ async function main() {
         evaluate(
           cdp,
           sessionId,
-          `Boolean(document.activeElement?.closest(".cm-editor"))`,
+          `(() => {
+            const trigger = document.querySelector('button[aria-label="插入链接"]');
+            return document.activeElement === trigger &&
+              trigger?.getAttribute("aria-expanded") === "false";
+          })()`,
         ),
       5_000,
-      "取消链接后焦点回到写作面",
+      "取消链接后焦点回到触发按钮",
     );
 
     await resetWritingSurface();
@@ -1410,6 +1543,10 @@ async function main() {
     console.log(`  窄屏：写作面在上、预览在下，分隔条隐藏（${stacked.columns} 列）`);
     console.log("  中文标题、表格、任务列表、代码块与长链接换行均已投影");
     console.log("  Ctrl+S 写回、Ctrl+Shift+S 另存、Ctrl+O 打开、拖入 Markdown 均通过");
+    console.log(
+      `  空写作面：${emptyState.actions.map((action) => action.text).join(" / ")}，无说明文字`,
+    );
+    console.log(`  链接错误：${JSON.stringify(linkError.text)}（一句，焦点留在输入框）`);
     console.log(`  插入链接：${JSON.stringify(linkMarkdown)}`);
     console.log(`  插入图片：${JSON.stringify(imageMarkdown.slice(0, 48))}…`);
     console.log(`  插入表格：${JSON.stringify(tableMarkdown)}`);

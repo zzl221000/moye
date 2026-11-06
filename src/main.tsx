@@ -19,5 +19,5 @@ async function bootstrap(mount: HTMLElement): Promise<void> {
 
 bootstrap(root).catch((error: unknown) => {
   console.error(error);
-  root.textContent = error instanceof Error ? error.message : "应用启动失败";
+  root.textContent = "应用启动失败，请刷新页面";
 });

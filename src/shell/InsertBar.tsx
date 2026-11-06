@@ -14,6 +14,7 @@ export default function InsertBar(props: InsertBarProps) {
   const [linkError, setLinkError] = createSignal<string | null>(null);
 
   let dialog: HTMLDialogElement | undefined;
+  let linkButton: HTMLButtonElement | undefined;
   let urlInput: HTMLInputElement | undefined;
 
   createEffect(
@@ -43,12 +44,21 @@ export default function InsertBar(props: InsertBarProps) {
     setLinkOpen(true);
   }
 
-  function closeLinkPrompt(): void {
+  function closeLinkPrompt(returnTo: "trigger" | "editor"): void {
     if (dialog?.open) dialog.close();
     setLinkOpen(false);
     setLinkError(null);
     queueMicrotask(() => {
-      props.session()?.focus();
+      if (returnTo === "trigger") linkButton?.focus();
+      else props.session()?.focus();
+    });
+  }
+
+  function failLink(message: string): void {
+    setLinkError(message);
+    queueMicrotask(() => {
+      urlInput?.focus();
+      urlInput?.select();
     });
   }
 
@@ -56,19 +66,19 @@ export default function InsertBar(props: InsertBarProps) {
     event.preventDefault();
     const value = url().trim();
     if (value.length === 0) {
-      setLinkError("请输入链接地址");
+      failLink("请输入链接地址");
       return;
     }
     if (!isSafeDestination(value)) {
-      setLinkError("链接地址无效");
+      failLink("请输入有效的链接地址");
       return;
     }
     const session = props.session();
     if (!session || !session.insertLink(value)) {
-      setLinkError("无法插入链接");
+      failLink("插入失败，请重试");
       return;
     }
-    closeLinkPrompt();
+    closeLinkPrompt("editor");
   }
 
   return (
@@ -79,6 +89,12 @@ export default function InsertBar(props: InsertBarProps) {
           type="button"
           aria-label="插入链接"
           title="插入链接"
+          aria-haspopup="dialog"
+          aria-controls="insert-link-dialog"
+          aria-expanded={linkOpen() ? "true" : "false"}
+          ref={(button) => {
+            linkButton = button;
+          }}
           onClick={openLinkPrompt}
         >
           <LinkIcon />
@@ -120,14 +136,15 @@ export default function InsertBar(props: InsertBarProps) {
 
       <dialog
         class="insert-dialog"
+        id="insert-link-dialog"
         aria-label="插入链接"
         ref={dialog}
         onCancel={(event) => {
           event.preventDefault();
-          closeLinkPrompt();
+          closeLinkPrompt("trigger");
         }}
         onClick={(event) => {
-          if (event.target === dialog) closeLinkPrompt();
+          if (event.target === dialog) closeLinkPrompt("trigger");
         }}
       >
         <form class="insert-dialog__form" onSubmit={submitLink}>
@@ -142,6 +159,7 @@ export default function InsertBar(props: InsertBarProps) {
             inputmode="url"
             autocomplete="off"
             spellcheck={false}
+            placeholder="https://example.com"
             aria-invalid={linkError() ? "true" : "false"}
             aria-describedby={linkError() ? "insert-link-error" : undefined}
             value={url()}
@@ -156,7 +174,11 @@ export default function InsertBar(props: InsertBarProps) {
             </p>
           </Show>
           <div class="insert-dialog__actions">
-            <button class="btn" type="button" onClick={closeLinkPrompt}>
+            <button
+              class="btn"
+              type="button"
+              onClick={() => closeLinkPrompt("trigger")}
+            >
               取消
             </button>
             <button class="btn btn--primary" type="submit">

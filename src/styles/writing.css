@@ -87,6 +87,11 @@
   font-size: var(--moye-type-compact-font-size);
 }
 
+.insert-dialog__input::placeholder {
+  color: var(--moye-color-text-tertiary);
+  opacity: 1;
+}
+
 .insert-dialog__input:focus-visible {
   outline-offset: 1px;
 }
@@ -117,8 +122,15 @@
   color: var(--moye-color-text-primary);
 }
 
+/* CodeMirror's wrapper never draws focus; the content box does when the editor
+   is reached by keyboard. A mouse click keeps the caret as the only indicator. */
 .writing-host .cm-editor.cm-focused {
   outline: none;
+}
+
+.writing-host .cm-editor .cm-content:focus-visible {
+  outline: var(--moye-focus-ring-width) solid var(--moye-color-border-focus);
+  outline-offset: -2px;
 }
 
 .writing-host .cm-editor .cm-scroller {
