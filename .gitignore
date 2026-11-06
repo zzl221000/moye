@@ -6,3 +6,4 @@ docs/*
 *.log
 *.pdf
 node_modules/
+.openchamber/
