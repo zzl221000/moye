@@ -1,0 +1,225 @@
+/* ==========================================================================
+   tokens.css — 墨页 design tokens
+   --------------------------------------------------------------------------
+   Semantic scale adapted from QuireKit @quirekit/unocss-preset@0.0.1
+   (quirekit.css, published 2026-11-04). Only the semantic roles are mirrored:
+   color, type, space, radius, elevation and motion. QuireKit's precompiled
+   stylesheet is not imported and no QuireKit-prefixed class names are used.
+   Every value is re-tuned to 墨页's paper-and-ink palette.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* --- palette ---------------------------------------------------------- */
+  /* Paper: the warm neutrals the workspace is built from. */
+  --moye-palette-paper: #ffffff;
+  --moye-palette-paper-warm: #fffdf9;
+  --moye-palette-panel-alt: #faf9f6;
+  --moye-palette-canvas: #f2f0ea;
+  --moye-palette-chrome: #f7f5f1;
+  --moye-palette-hover: #ebe8e1;
+  --moye-palette-pressed: #e2dfd6;
+
+  /* Ink: text and rules, from full ink to the faintest hairline. */
+  --moye-palette-ink: #1b1f24;
+  --moye-palette-ink-soft: #414950;
+  --moye-palette-muted: #6b7279;
+  --moye-palette-faint: #9aa1a8;
+  --moye-palette-line: #e4e0d8;
+  --moye-palette-line-strong: #d2ccc0;
+  --moye-palette-border-strong: #b6ad9e;
+  --moye-palette-selection: #d5e5de;
+
+  /* Accent: the jade of a seal, used sparingly for action and focus. */
+  --moye-palette-accent: #1f5f4e;
+  --moye-palette-accent-ink: #154238;
+  --moye-palette-accent-soft: #e6efeb;
+
+  /* Feedback: warm equivalents of the semantic status colors. */
+  --moye-palette-danger: #a92f26;
+  --moye-palette-danger-surface: #f8e9e7;
+  --moye-palette-warning: #8a5a00;
+  --moye-palette-warning-surface: #f6efe0;
+  --moye-palette-info: #2f5d8a;
+  --moye-palette-info-surface: #e9eff6;
+
+  /* --- color: surfaces -------------------------------------------------- */
+  --moye-color-surface-canvas: var(--moye-palette-canvas);
+  --moye-color-surface-chrome: var(--moye-palette-chrome);
+  --moye-color-surface-page: var(--moye-palette-paper);
+  --moye-color-surface-writing: var(--moye-palette-paper-warm);
+  --moye-color-surface-subtle: var(--moye-palette-panel-alt);
+  --moye-color-surface-raised: var(--moye-palette-paper);
+  --moye-color-surface-hover: var(--moye-palette-hover);
+  --moye-color-surface-pressed: var(--moye-palette-pressed);
+  --moye-color-surface-selected: var(--moye-palette-accent-soft);
+  --moye-color-surface-inverse: var(--moye-palette-ink);
+  --moye-color-surface-scrim: rgb(28 25 20 / 42%);
+  --moye-color-surface-transparent: rgb(255 255 255 / 0%);
+
+  /* --- color: text ------------------------------------------------------ */
+  --moye-color-text-primary: var(--moye-palette-ink);
+  --moye-color-text-secondary: var(--moye-palette-ink-soft);
+  --moye-color-text-tertiary: var(--moye-palette-muted);
+  --moye-color-text-muted: var(--moye-palette-muted);
+  --moye-color-text-placeholder: var(--moye-palette-faint);
+  --moye-color-text-disabled: var(--moye-palette-faint);
+  --moye-color-text-accent: var(--moye-palette-accent-ink);
+  --moye-color-text-on-accent: var(--moye-palette-paper);
+  --moye-color-text-inverse: var(--moye-palette-panel-alt);
+
+  /* --- color: borders --------------------------------------------------- */
+  --moye-color-border-subtle: var(--moye-palette-line);
+  --moye-color-border-default: var(--moye-palette-line-strong);
+  --moye-color-border-strong: var(--moye-palette-border-strong);
+  --moye-color-border-focus: var(--moye-palette-accent);
+  --moye-color-border-disabled: #e9e5dd;
+
+  /* --- color: actions and feedback -------------------------------------- */
+  --moye-color-action-primary: var(--moye-palette-accent);
+  --moye-color-action-hover: var(--moye-palette-accent-ink);
+  --moye-color-action-pressed: #0f332b;
+  --moye-color-action-soft: var(--moye-palette-accent-soft);
+  --moye-color-action-soft-hover: #dbe8e3;
+  --moye-color-action-soft-pressed: #cfdfd8;
+  --moye-color-action-text: var(--moye-palette-accent-ink);
+  --moye-color-action-foreground: var(--moye-palette-paper);
+  --moye-color-danger: var(--moye-palette-danger);
+  --moye-color-danger-surface: var(--moye-palette-danger-surface);
+  --moye-color-warning: var(--moye-palette-warning);
+  --moye-color-warning-surface: var(--moye-palette-warning-surface);
+  --moye-color-success: var(--moye-palette-accent);
+  --moye-color-success-surface: var(--moye-palette-accent-soft);
+  --moye-color-info: var(--moye-palette-info);
+  --moye-color-info-surface: var(--moye-palette-info-surface);
+
+  /* --- type families ---------------------------------------------------- */
+  --moye-font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --moye-font-document: "SourceHanSansSC-Regular", "Noto Sans SC",
+    "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --moye-font-serif: "Songti SC", "Noto Serif CJK SC", "Source Han Serif SC",
+    "STSong", Georgia, serif;
+  --moye-font-code: "Cascadia Code", "Cascadia Mono", Consolas, "SF Mono",
+    "JetBrains Mono", monospace;
+
+  /* --- type scale ------------------------------------------------------- */
+  --moye-type-display-font-family: var(--moye-font-ui);
+  --moye-type-display-font-size: 40px;
+  --moye-type-display-font-weight: 600;
+  --moye-type-display-line-height: 1.2;
+  --moye-type-display-letter-spacing: -0.01em;
+
+  --moye-type-page-title-font-family: var(--moye-font-ui);
+  --moye-type-page-title-font-size: 28px;
+  --moye-type-page-title-font-weight: 600;
+  --moye-type-page-title-line-height: 1.2857;
+  --moye-type-page-title-letter-spacing: -0.01em;
+
+  --moye-type-section-title-font-family: var(--moye-font-ui);
+  --moye-type-section-title-font-size: 20px;
+  --moye-type-section-title-font-weight: 600;
+  --moye-type-section-title-line-height: 1.4;
+  --moye-type-section-title-letter-spacing: -0.01em;
+
+  --moye-type-heading-font-family: var(--moye-font-ui);
+  --moye-type-heading-font-size: 16px;
+  --moye-type-heading-font-weight: 600;
+  --moye-type-heading-line-height: 1.5;
+  --moye-type-heading-letter-spacing: normal;
+
+  --moye-type-body-font-family: var(--moye-font-ui);
+  --moye-type-body-font-size: 14px;
+  --moye-type-body-font-weight: 400;
+  --moye-type-body-line-height: 1.5714;
+  --moye-type-body-letter-spacing: normal;
+
+  --moye-type-compact-font-family: var(--moye-font-ui);
+  --moye-type-compact-font-size: 13px;
+  --moye-type-compact-font-weight: 400;
+  --moye-type-compact-line-height: 1.6154;
+  --moye-type-compact-letter-spacing: normal;
+
+  --moye-type-control-font-family: var(--moye-font-ui);
+  --moye-type-control-font-size: 14px;
+  --moye-type-control-font-weight: 500;
+  --moye-type-control-line-height: 1.5714;
+  --moye-type-control-letter-spacing: normal;
+
+  --moye-type-helper-font-family: var(--moye-font-ui);
+  --moye-type-helper-font-size: 12px;
+  --moye-type-helper-font-weight: 400;
+  --moye-type-helper-line-height: 1.6667;
+  --moye-type-helper-letter-spacing: normal;
+
+  --moye-type-code-font-family: var(--moye-font-code);
+  --moye-type-code-font-size: 12px;
+  --moye-type-code-font-weight: 400;
+  --moye-type-code-line-height: 1.6667;
+  --moye-type-code-letter-spacing: normal;
+
+  /* --- space ------------------------------------------------------------ */
+  --moye-space-inline-tight: 4px;
+  --moye-space-inline: 6px;
+  --moye-space-surface-compact: 12px;
+  --moye-space-surface: 16px;
+  --moye-space-group: 24px;
+  --moye-space-section: 32px;
+  --moye-space-page: 40px;
+  --moye-space-major: 48px;
+
+  /* --- radius ----------------------------------------------------------- */
+  --moye-radius-control: 4px;
+  --moye-radius-group: 6px;
+  --moye-radius-overlay: 8px;
+  --moye-radius-dialog: 12px;
+  --moye-radius-page: 2px;
+  --moye-radius-pill: 999px;
+
+  /* --- elevation -------------------------------------------------------- */
+  --moye-elevation-flat: none;
+  --moye-elevation-raised: 0 1px 2px rgb(28 25 20 / 8%),
+    0 1px 1px rgb(28 25 20 / 4%);
+  --moye-elevation-overlay: 0 12px 32px rgb(28 25 20 / 12%),
+    0 2px 8px rgb(28 25 20 / 8%);
+  --moye-elevation-modal: 0 24px 64px rgb(28 25 20 / 18%),
+    0 8px 24px rgb(28 25 20 / 10%);
+  --moye-elevation-paper: 0 1px 1px rgb(28 25 20 / 6%),
+    0 18px 48px -20px rgb(28 25 20 / 32%);
+
+  /* --- motion ----------------------------------------------------------- */
+  --moye-motion-duration-feedback: 120ms;
+  --moye-motion-duration-control: 180ms;
+  --moye-motion-duration-overlay: 240ms;
+  --moye-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --moye-motion-easing-enter: cubic-bezier(0, 0, 0.2, 1);
+  --moye-motion-easing-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* --- controls --------------------------------------------------------- */
+  --moye-control-compact: 24px;
+  --moye-control-default: 28px;
+  --moye-control-regular: 32px;
+  --moye-control-comfortable: 36px;
+  --moye-control-large: 40px;
+  --moye-control-icon: 16px;
+  --moye-control-icon-large: 20px;
+  --moye-control-touch-target: 44px;
+
+  /* --- shell layout ----------------------------------------------------- */
+  --moye-topbar-height: 56px;
+  --moye-statusbar-height: 36px;
+  --moye-splitter-width: 9px;
+  --moye-writing-measure: 42em;
+  --moye-preview-paper-width: 600px;
+  --moye-focus-ring-width: 2px;
+  --moye-focus-ring-offset: 2px;
+
+  /* --- layers ----------------------------------------------------------- */
+  --moye-layer-base: 0;
+  --moye-layer-chrome: 100;
+  --moye-layer-overlay: 1000;
+  --moye-layer-modal: 1100;
+  --moye-layer-toast: 1200;
+  --moye-layer-tooltip: 1300;
+}

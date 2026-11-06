@@ -1,0 +1,54 @@
+import { BrandMark, ExportIcon, OpenIcon, SaveIcon, SettingsIcon } from "./icons";
+
+type TopBarProps = {
+  fileName: string;
+};
+
+export default function TopBar(props: TopBarProps) {
+  return (
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true">
+          <BrandMark />
+        </span>
+        <span class="brand__name">墨页</span>
+      </div>
+
+      <span class="topbar__rule" aria-hidden="true" />
+
+      <input
+        class="doc-name"
+        type="text"
+        value={props.fileName}
+        readonly
+        spellcheck={false}
+        aria-label="文件名"
+      />
+
+      <span class="topbar__spacer" aria-hidden="true" />
+
+      <div class="topbar__actions">
+        <button class="btn" type="button" title="打开">
+          <OpenIcon />
+          <span class="btn__label">打开</span>
+        </button>
+
+        <button class="btn" type="button" title="保存">
+          <SaveIcon />
+          <span class="btn__label">保存</span>
+        </button>
+
+        <span class="topbar__rule" aria-hidden="true" />
+
+        <button class="btn btn--primary" type="button" title="导出 PDF">
+          <ExportIcon />
+          <span class="btn__label">导出 PDF</span>
+        </button>
+
+        <button class="btn btn--icon" type="button" aria-label="设置" title="设置">
+          <SettingsIcon />
+        </button>
+      </div>
+    </header>
+  );
+}

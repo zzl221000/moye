@@ -5,3 +5,4 @@ docs/*
 .pages-test/
 *.log
 *.pdf
+node_modules/
