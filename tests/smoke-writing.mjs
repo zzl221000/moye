@@ -2,7 +2,7 @@
 /**
  * Headless smoke test for the MSFE live writing surface.
  *
- * jsdom cannot lay out CodeMirror, so this script starts the Vite dev server,
+ * jsdom cannot lay out the MSFE surface, so this script starts the Vite dev server,
  * drives headless Chrome over the DevTools protocol, loads the sample, replaces
  * it with a Markdown fixture, checks live-mode projections, types Chinese text
  * and asserts `getMarkdown()` round-trips.

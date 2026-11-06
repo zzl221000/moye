@@ -4,7 +4,7 @@
 
 ## 写作面冒烟
 
-jsdom 不做布局，CodeMirror 无法在单元测试里挂载。`tests/smoke-writing.mjs` 用真实的无头 Chrome/Edge 验证写作面：
+jsdom 不做布局，MSFE 写作面无法在单元测试里挂载。`tests/smoke-writing.mjs` 用真实的无头 Chrome/Edge 验证写作面：
 
 ```bash
 bun run smoke:writing
@@ -71,6 +71,7 @@ tests/
     mixed.md         混合结构：多级标题、列表、引用、表格、代码块、
                      任务列表、长 token、图片
     long.md          长文档：10 章，跨 5 页
+    multi-h1.md      版式选项单测用，不参与 PDF 基线
     assets/block.png 本地图片，不依赖网络
   golden/
     simple.json      页数 + 逐页提取文本

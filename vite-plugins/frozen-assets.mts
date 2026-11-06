@@ -8,8 +8,8 @@ import type { Plugin } from "vite";
  * into `public/` (two sources, silent drift), this plugin serves the repository
  * files in dev and emits them into `dist/` during the build.
  *
- * The whitelist is deliberately explicit. `vendor/` also holds CodeMirror 5
- * from the old editor, which the rewritten app does not use.
+ * The whitelist is deliberately explicit: everything outside it is bundled or
+ * served by Vite, and only these files must keep their exact bytes.
  */
 const FROZEN_FILES = [
   "export-doc.js",
