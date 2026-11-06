@@ -1,6 +1,6 @@
 # 测试
 
-本仓库有两条独立的验证线：PDF 导出基线与写作面冒烟。
+本仓库有三条验证线：写作面冒烟、共享渲染快照、PDF 导出基线。
 
 ## 写作面冒烟
 
@@ -25,6 +25,34 @@ MOYE_SMOKE_SCREENSHOT=writing.png MOYE_SMOKE_SCREENSHOT_EMPTY=empty.png bun run 
 
 它不在 `bun run test` 里运行，因为浏览器不是单元测试环境的依赖。`bun run test` 只覆盖纯函数：文件名归一化、草稿读写、文件句柄能力降级。
 
+## 应用端到端导出
+
+应用侧还有两处测试：
+
+- `tests/render.test.ts`：共享渲染接缝（`src/doc/render.ts`）的快照测试，覆盖 `simple`、`mixed`、`long` 三份 fixture；快照在 `tests/__snapshots__/`。
+- `tests/e2e.mjs`：在构建后的应用里真实点击导出，校验下载的 PDF；见下文。
+
+```bash
+bun run test:e2e            # 先 vite build，再跑应用导出
+node tests/e2e.mjs          # 假设 dist/ 已经是最新构建
+node tests/e2e.mjs --keep   # 保留下载的 PDF 与临时 Chrome 目录
+node tests/e2e.mjs --ci     # CI 模式：页数 + 关键文本
+```
+
+它会：
+
+1. 用 Node 内置 HTTP 服务把 `dist/` 挂在 Pages base `/moye/` 下；
+2. 启动无头 Chrome（默认 `C:\Program Files\Google\Chrome\Application\chrome.exe`，可用 `CHROME_PATH` 覆盖）；
+3. 打开构建产物，等待字体与图片就绪，点击 `[data-action="export"]`；
+4. 通过 `Browser.setDownloadBehavior` 接收浏览器下载的 PDF；
+5. 用与 `tests/compare.mjs` 相同的页数优先级和 `pdftotext -enc UTF-8` 规则，与 `tests/golden/mixed.json` 比对。
+
+退出码：`0` 通过；`1` PDF 或文本不匹配；`2` 缺少构建、Chrome、`pdftotext` 或参数错误。
+
+`--ci` 只断言页数与 13 段关键文本（去掉所有空白后做子串匹配）。不同 `pdftotext` 实现可能改变换行位置，所以 CI 用这个模式；本地默认模式仍做逐页精确比对。
+
+`bun run test` 不包含端到端导出；它跑共享接缝的三份 fixture 快照。
+
 ## PDF 导出基线
 
 这组测试把“当前导出链路的输出”固定成黄金值：给定一份 Markdown，导出后的**页数**与**提取文本**必须与黄金文件一致。它用于重写写作面与应用外壳期间确认导出行为没有变化，不做像素比对。
@@ -45,7 +73,8 @@ tests/
     simple.json      页数 + 逐页提取文本
     mixed.json
     long.json
-  compare.mjs        导出、提取、比对
+  compare.mjs        导出、提取、比对（CLI）
+  e2e.mjs            构建产物 → 无头 Chrome → 导出下载 → 比对 mixed
   README.md
 ```
 
@@ -129,10 +158,12 @@ node tests/compare.mjs --update --source rewrite/quirekit
 
 ### CI 提示
 
-CI 需要：Node 22+、Chrome/Edge（可设 `CHROME_PATH`）、`pdftotext`（通常来自 `poppler-utils`）。命令就是：
+CI 需要：Node 22+、Chrome/Edge（可设 `CHROME_PATH`）、`pdftotext`（通常来自 `poppler-utils`）。
 
 ```bash
-node tests/compare.mjs
+node tests/compare.mjs      # CLI 基线
+bun run test:e2e            # 应用导出（精确文本）
+node tests/e2e.mjs --ci     # 应用导出（页数 + 关键文本，GitHub Actions 使用）
 ```
 
-不需要 `npm install`，也不访问网络。
+不需要 `npm install`，也不访问网络（安装依赖与 Chrome 除外）。

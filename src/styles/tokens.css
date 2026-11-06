@@ -211,7 +211,9 @@
   --moye-statusbar-height: 36px;
   --moye-splitter-width: 9px;
   --moye-writing-measure: 42em;
-  --moye-preview-paper-width: 600px;
+  --moye-preview-paper-width: 794px;
+  --moye-preview-paper-height: 1123px;
+  --moye-preview-paper-margin: 48px;
   --moye-focus-ring-width: 2px;
   --moye-focus-ring-offset: 2px;
 
