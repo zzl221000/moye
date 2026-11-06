@@ -3,6 +3,7 @@ import {
   WritingSession,
   type WritingState,
 } from "../writing/session";
+import InsertBar from "./InsertBar";
 
 export interface WritingPaneProps {
   readonly hasDocument: boolean;
@@ -37,6 +38,10 @@ export default function WritingPane(props: WritingPaneProps) {
       data-region="writing"
       aria-label="写作面"
     >
+      <Show when={props.hasDocument}>
+        <InsertBar session={() => session ?? null} />
+      </Show>
+
       <div class="writing-surface">
         <div class="writing-page">
           <div class="writing-host" ref={host} hidden={!props.hasDocument} />
