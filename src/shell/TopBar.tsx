@@ -2,6 +2,8 @@ import { BrandMark, ExportIcon, OpenIcon, SaveIcon, SettingsIcon } from "./icons
 
 type TopBarProps = {
   fileName: string;
+  onOpen: () => void;
+  onSave: () => void;
   onExport: () => void;
   exporting: boolean;
   exportError?: string | null;
@@ -31,12 +33,12 @@ export default function TopBar(props: TopBarProps) {
       <span class="topbar__spacer" aria-hidden="true" />
 
       <div class="topbar__actions">
-        <button class="btn" type="button" title="打开">
+        <button class="btn" type="button" title="打开" onClick={props.onOpen}>
           <OpenIcon />
           <span class="btn__label">打开</span>
         </button>
 
-        <button class="btn" type="button" title="保存">
+        <button class="btn" type="button" title="保存" onClick={props.onSave}>
           <SaveIcon />
           <span class="btn__label">保存</span>
         </button>

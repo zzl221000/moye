@@ -1,4 +1,6 @@
-export type SaveState = "idle" | "saved" | "dirty" | "error";
+import type { SaveState } from "../writing/session";
+
+export type { SaveState };
 
 type StatusBarProps = {
   fileName: string;

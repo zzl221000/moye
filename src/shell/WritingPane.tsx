@@ -1,26 +1,63 @@
-import { CodeBlockIcon, ImageIcon, LinkIcon, TableIcon } from "./icons";
+import { onSettled, Show } from "solid-js";
+import {
+  WritingSession,
+  type WritingState,
+} from "../writing/session";
 
-export default function WritingPane() {
+export interface WritingPaneProps {
+  readonly hasDocument: boolean;
+  readonly onState: (state: WritingState) => void;
+  readonly onReady: (session: WritingSession | null) => void;
+}
+
+export default function WritingPane(props: WritingPaneProps) {
+  let host: HTMLDivElement | undefined;
+  let session: WritingSession | undefined;
+
+  onSettled(() => {
+    const parent = host;
+    if (!parent) return;
+    const created = new WritingSession({
+      host: parent,
+      onState: props.onState,
+    });
+    session = created;
+    props.onReady(created);
+    return () => {
+      props.onReady(null);
+      created.destroy();
+      session = undefined;
+    };
+  });
+
   return (
     <section class="writing-pane" data-region="writing" aria-label="写作面">
-      <div class="writing-bar" role="toolbar" aria-label="插入">
-        <button class="icon-btn" type="button" aria-label="插入链接" title="插入链接">
-          <LinkIcon />
-        </button>
-        <button class="icon-btn" type="button" aria-label="插入图片" title="插入图片">
-          <ImageIcon />
-        </button>
-        <button class="icon-btn" type="button" aria-label="插入表格" title="插入表格">
-          <TableIcon />
-        </button>
-        <button class="icon-btn" type="button" aria-label="插入代码块" title="插入代码块">
-          <CodeBlockIcon />
-        </button>
-      </div>
-
       <div class="writing-surface">
         <div class="writing-page">
-          <span class="writing-caret" aria-hidden="true" />
+          <div class="writing-host" ref={host} hidden={!props.hasDocument} />
+
+          <Show when={!props.hasDocument}>
+            <div class="writing-empty">
+              <button
+                class="btn writing-empty__action"
+                type="button"
+                onClick={() => {
+                  void session?.open();
+                }}
+              >
+                打开文件
+              </button>
+              <button
+                class="btn writing-empty__action"
+                type="button"
+                onClick={() => {
+                  session?.loadSample();
+                }}
+              >
+                载入示例
+              </button>
+            </div>
+          </Show>
         </div>
       </div>
     </section>
