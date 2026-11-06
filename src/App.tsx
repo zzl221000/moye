@@ -1,4 +1,10 @@
-import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  onCleanup,
+  onSettled,
+} from "solid-js";
 import { exportDocumentToPdf } from "./doc/export";
 import {
   browserOptionsStorage,
@@ -19,6 +25,7 @@ import {
   SPLIT_STEP,
   writeSplit,
 } from "./shell/split";
+import { installScrollSync } from "./shell/scroll-sync";
 import { countCharacters } from "./writing/count";
 import { browserDraftStorage, readDraft } from "./writing/draft";
 import { FALLBACK_FILE_NAME } from "./writing/filename";
@@ -115,7 +122,16 @@ export default function App() {
 
   let session: WritingSession | null = null;
   let settingsButton: HTMLButtonElement | null = null;
+  let workspace: HTMLElement | undefined;
   let drag: SplitDrag | null = null;
+
+  // Same-pane proportional scrolling without a setting: one cheap listener on
+  // the workspace, disabled while the panes are stacked below 900px.
+  onSettled(() => {
+    const element = workspace;
+    if (!element) return;
+    return installScrollSync(element);
+  });
 
   // The preview follows the document, but not on every keystroke: rendering
   // and sanitizing a long document synchronously would stall typing. Theme and
@@ -272,6 +288,9 @@ export default function App() {
         />
 
         <main
+          ref={(element) => {
+            workspace = element;
+          }}
           class={`workspace${resizing() ? " workspace--resizing" : ""}`}
           aria-label="工作区"
           style={{
