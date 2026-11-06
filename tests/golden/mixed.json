@@ -1,0 +1,13 @@
+{
+  "fixture": "tests/fixtures/mixed.md",
+  "pageCount": 3,
+  "capturedFrom": {
+    "branch": "rewrite/quirekit",
+    "commit": "1a2ba5b"
+  },
+  "pages": [
+    "混合结构基线\n这份 fixture 覆盖导出链路上容易回归的块级与行内结构，页面数量本身不是重点，结构齐全才是。\n标题层级\n三级标题\n标题用于确认字号、间距与断页行为。正文紧跟在标题之后，避免出现孤立的标题行。\n无序列表\n• 第一项：普通文本 • 第二项：包含加粗与 行内代码 • 第三项：包含一个较长的说明，用来观察列表项内部的换行\n嵌套项 A 嵌套项 B\n有序列表\n1. 准备输入文档 2. 运行导出命令 3. 检查页数与文本\n引用\n引用段落的第一行。 引用段落的第二行，用来确认引用块的左边框与缩进。",
+    "混合结构基线\n表格\n项目 纸张 页边距 页脚 主题\n\n数量 说明 1 A4 纵向\n36 单位 pt 2 页码开关 4 paper / editorial / compact / dark\n\n代码块\nexport function add(a, b) {   return a + b; }\nconsole.log(add(1, 2));\n\n任务列表\n尚未完成的任务 已经完成的任务\n长 token\n下面这个标识符没有任何可断行位置，用来验证长 token 不会撑破页面： pkg_config_dependency_resolution_without_any_break_opportunity_0123456789abcdef 再给一个很长的链接地址： https://example.com/a/very/long/path/that/should/not/break/the/page/layout/0123456789abcde f\n图片\n\n第2页/共3页",
+    "混合结构基线\n图片来自 fixture 目录下的本地 PNG，不依赖网络；它同时验证相对路径经由 /local/ 静态服务解析。\n结尾\n最后一段确认以上结构之后仍有正常正文，且页面在需要时自然结束。\n第3页/共3页"
+  ]
+}
