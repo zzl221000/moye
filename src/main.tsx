@@ -2,6 +2,7 @@ import { render } from "@solidjs/web";
 import App from "./App";
 import "./styles/tokens.css";
 import "./styles/shell.css";
+import "./styles/writing.css";
 
 const root = document.getElementById("root");
 

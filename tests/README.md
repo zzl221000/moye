@@ -1,10 +1,37 @@
-# PDF 导出基线
+# 测试
+
+本仓库有两条独立的验证线：PDF 导出基线与写作面冒烟。
+
+## 写作面冒烟
+
+jsdom 不做布局，CodeMirror 无法在单元测试里挂载。`tests/smoke-writing.mjs` 用真实的无头 Chrome/Edge 验证写作面：
+
+```bash
+bun run smoke:writing
+```
+
+需要留档时，可保存两张截图：
+
+```bash
+MOYE_SMOKE_SCREENSHOT=writing.png MOYE_SMOKE_SCREENSHOT_EMPTY=empty.png bun run smoke:writing
+```
+
+脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影；然后用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，键入 `中文 ABC 123`，等待草稿写入后刷新页面并断言 `getMarkdown()` 与文件名都恢复。
+
+前置条件：
+
+- Node.js 22+（脚本使用内置 `WebSocket` 驱动 DevTools）。
+- 本机安装 Chrome 或 Edge；找不到时用 `CHROME_PATH` 指向可执行文件。
+
+它不在 `bun run test` 里运行，因为浏览器不是单元测试环境的依赖。`bun run test` 只覆盖纯函数：文件名归一化、草稿读写、文件句柄能力降级。
+
+## PDF 导出基线
 
 这组测试把“当前导出链路的输出”固定成黄金值：给定一份 Markdown，导出后的**页数**与**提取文本**必须与黄金文件一致。它用于重写写作面与应用外壳期间确认导出行为没有变化，不做像素比对。
 
 黄金值捕获于 `rewrite/quirekit@1a2ba5b`（2026-11-06），即重写开始前的实现。
 
-## 目录
+### 目录
 
 ```
 tests/
@@ -22,14 +49,14 @@ tests/
   README.md
 ```
 
-## 前置条件
+### 前置条件
 
 - Node.js 22+（`export.mjs` 使用内置 `WebSocket` 驱动 Chrome）。
 - 本机安装 Chrome 或 Edge。找不到时用 `CHROME_PATH` 指向可执行文件。
 - `pdftotext`（poppler-utils 或 xpdf）在 `PATH` 上；也可用 `PDFTOTEXT_PATH` 指定。
 - `pdfinfo` 可选。存在时用于读取页数；不存在时回退到解析 PDF 结构。
 
-## 运行比对
+### 运行比对
 
 ```bash
 node tests/compare.mjs
@@ -48,7 +75,7 @@ node tests/compare.mjs --update --source rewrite/quirekit
 
 `--update` 是重新生成黄金值的唯一方式；`--source` 只影响黄金文件里记录的版本来源。
 
-## 页数从哪里来
+### 页数从哪里来
 
 `compare.mjs` 按以下顺序取页数，并在运行时打印实际使用的来源：
 
@@ -62,7 +89,7 @@ node tests/compare.mjs --update --source rewrite/quirekit
 
 文本统一用 `pdftotext -enc UTF-8 <pdf> <txt>` 提取，按换页符 `\f` 拆成逐页字符串。每页会去掉行尾空白和首尾空行，除此之外不做归一化。
 
-## 黄金值格式
+### 黄金值格式
 
 ```json
 {
@@ -77,7 +104,7 @@ node tests/compare.mjs --update --source rewrite/quirekit
 - `pages` 是 `pdftotext` 的逐页文本。`pages.length` 必须等于 `pageCount`，否则脚本按环境错误处理。
 - `capturedFrom` 只作溯源，不参与比对。
 
-## 预期变化后如何更新黄金值
+### 预期变化后如何更新黄金值
 
 只有**有意的导出行为变化**才更新黄金值。步骤：
 
@@ -94,13 +121,13 @@ node tests/compare.mjs --update --source rewrite/quirekit
 
 不要为了“让测试变绿”而直接更新黄金值；先确认差异来自预期的导出改动，而不是环境或依赖漂移。
 
-## 环境差异
+### 环境差异
 
 - 黄金文本由 **Xpdf 4.00 的 `pdftotext`** 捕获。不同实现（例如 poppler 的不同版本）可能改变换行位置、列表符号或空白；若脚本提示“仅空白/换行不同”，优先在与捕获时一致的工具链上复核。
 - 文本提取依赖 PDF 内嵌字体；仓库自带 `fonts/SourceHanSansSC-Regular.ttf`，导出不访问网络。
 - 不比较 PDF 字节：dompdf 会写入时间等元数据，字节级比对没有意义；页数与文本才是稳定的外部行为。
 
-## CI 提示
+### CI 提示
 
 CI 需要：Node 22+、Chrome/Edge（可设 `CHROME_PATH`）、`pdftotext`（通常来自 `poppler-utils`）。命令就是：
 

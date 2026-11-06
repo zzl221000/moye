@@ -1,5 +1,5 @@
 import { render } from "@solidjs/web";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import App from "../src/App";
 
 let dispose: (() => void) | undefined;
@@ -10,6 +10,10 @@ function mount(): HTMLElement {
   dispose = render(() => <App />, root);
   return root;
 }
+
+beforeEach(() => {
+  localStorage.clear();
+});
 
 afterEach(() => {
   dispose?.();
@@ -42,14 +46,18 @@ describe("墨页 shell", () => {
     expect(root.querySelector(".topbar")?.textContent).toContain("墨页");
   });
 
-  it("offers only the four insert actions above the writing surface", () => {
+  it("opens on an empty writing surface with exactly two actions", () => {
     const root = mount();
     const labels = Array.from(
-      root.querySelectorAll(".writing-bar button"),
-      (button) => button.getAttribute("aria-label"),
+      root.querySelectorAll(".writing-empty button"),
+      (button) => button.textContent?.trim(),
     );
 
-    expect(labels).toEqual(["插入链接", "插入图片", "插入表格", "插入代码块"]);
+    expect(labels).toEqual(["打开文件", "载入示例"]);
+    expect(root.querySelector(".writing-bar")).toBeNull();
+    expect(root.querySelector(".writing-host")?.hasAttribute("hidden")).toBe(
+      true,
+    );
   });
 
   it("reports save state, file name, words and pages in the status bar", () => {

@@ -1,0 +1,181 @@
+/* ==========================================================================
+   writing.css — MSFE live writing surface
+   Only the content of the writing pane lives here. The shell frame stays in
+   shell.css; document/PDF typography stays in styles/doc.css.
+   ========================================================================== */
+
+/* --- surface ------------------------------------------------------------- */
+
+.writing-surface {
+  overflow: hidden;
+  padding: 0;
+}
+
+.writing-surface .writing-page {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+}
+
+.writing-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.writing-host[hidden] {
+  display: none;
+}
+
+.writing-empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: var(--moye-space-inline);
+}
+
+.writing-empty__action {
+  border-color: var(--moye-color-border-default);
+  background: var(--moye-color-surface-page);
+  color: var(--moye-color-text-primary);
+}
+
+.writing-empty__action:hover {
+  border-color: var(--moye-color-border-strong);
+  background: var(--moye-color-surface-hover);
+}
+
+/* --- CodeMirror chrome ---------------------------------------------------- */
+
+.writing-host .cm-editor {
+  height: 100%;
+  background: transparent;
+  color: var(--moye-color-text-primary);
+}
+
+.writing-host .cm-editor.cm-focused {
+  outline: none;
+}
+
+.writing-host .cm-editor .cm-scroller {
+  overflow: auto;
+  font-family: var(--moye-font-document);
+}
+
+.writing-host .cm-editor[data-msfe-mode="live"] .cm-content,
+.writing-host .cm-editor[data-msfe-mode="locked"] .cm-content {
+  --moye-writing-pad: clamp(
+    var(--moye-space-group),
+    6vw,
+    var(--moye-space-page)
+  );
+  max-width: calc(var(--moye-writing-measure) + 2 * var(--moye-writing-pad));
+  margin: 0 auto;
+  padding: var(--moye-space-major) var(--moye-writing-pad);
+  color: var(--moye-color-text-primary);
+  font-family: var(--moye-font-document);
+  font-size: 15px;
+  line-height: 1.8;
+  caret-color: var(--moye-color-text-accent);
+}
+
+.writing-host .cm-editor .cm-line {
+  padding: 0;
+}
+
+.writing-host .cm-editor .cm-selectionBackground,
+.writing-host .cm-editor .cm-content ::selection {
+  background: var(--moye-palette-selection);
+}
+
+/* --- live Markdown presentation ------------------------------------------ */
+
+.writing-host .msfe-heading {
+  color: var(--moye-color-text-primary);
+}
+
+.writing-host .msfe-emphasis {
+  font-style: italic;
+}
+
+.writing-host .cm-editor .msfe-link {
+  color: var(--moye-color-action-primary);
+}
+
+.writing-host .msfe-strike {
+  color: var(--moye-color-text-tertiary);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.writing-host .msfe-inline-code {
+  padding: 0.08em 0.32em;
+  border-radius: var(--moye-radius-control);
+  background: var(--moye-color-surface-subtle);
+  color: var(--moye-color-text-accent);
+  font-family: var(--moye-font-code);
+  font-size: 0.92em;
+}
+
+.writing-host .cm-line.msfe-code-line {
+  background: var(--moye-color-surface-subtle);
+}
+
+.writing-host .msfe-code-language {
+  appearance: none;
+  margin: 6px 0 4px;
+  padding: 0 12px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--moye-color-text-tertiary);
+  font-family: var(--moye-font-code);
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.writing-host .msfe-code-language:focus-visible {
+  outline: 1px solid var(--moye-color-border-focus);
+  outline-offset: 2px;
+}
+
+.writing-host .msfe-quote-prefix-hidden,
+.writing-host .msfe-list-prefix-hidden {
+  color: transparent;
+}
+
+.writing-host .cm-line.msfe-quote-line {
+  border-inline-start: 2px solid var(--moye-color-border-default);
+  padding-inline-start: var(--moye-space-inline);
+  color: var(--moye-color-text-secondary);
+}
+
+.writing-host .msfe-list-number {
+  color: var(--moye-color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.writing-host .msfe-task-control {
+  margin: 0 0.4em 0 0;
+  vertical-align: -0.08em;
+  accent-color: var(--moye-color-action-primary);
+}
+
+.writing-host .msfe-table-cell {
+  border-color: var(--moye-color-border-subtle);
+}
+
+.writing-host .msfe-table-header .msfe-table-cell {
+  background: var(--moye-color-surface-subtle);
+  color: var(--moye-color-text-primary);
+}
+
+.writing-host .cm-line.msfe-rule {
+  color: transparent;
+  border-top: 1px solid var(--moye-color-border-default);
+}
