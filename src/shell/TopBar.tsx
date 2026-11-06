@@ -2,6 +2,9 @@ import { BrandMark, ExportIcon, OpenIcon, SaveIcon, SettingsIcon } from "./icons
 
 type TopBarProps = {
   fileName: string;
+  onExport: () => void;
+  exporting: boolean;
+  exportError?: string | null;
 };
 
 export default function TopBar(props: TopBarProps) {
@@ -40,7 +43,15 @@ export default function TopBar(props: TopBarProps) {
 
         <span class="topbar__rule" aria-hidden="true" />
 
-        <button class="btn btn--primary" type="button" title="导出 PDF">
+        <button
+          class="btn btn--primary"
+          type="button"
+          title={props.exportError ?? "导出 PDF"}
+          data-action="export"
+          aria-busy={props.exporting ? "true" : "false"}
+          disabled={props.exporting}
+          onClick={() => props.onExport()}
+        >
           <ExportIcon />
           <span class="btn__label">导出 PDF</span>
         </button>
@@ -49,6 +60,12 @@ export default function TopBar(props: TopBarProps) {
           <SettingsIcon />
         </button>
       </div>
+
+      {props.exportError ? (
+        <span class="visually-hidden" role="alert">
+          {props.exportError}
+        </span>
+      ) : null}
     </header>
   );
 }

@@ -4,6 +4,7 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
     "moduleDetection": "force",
     "jsx": "preserve",
     "jsxImportSource": "@solidjs/web",
@@ -20,5 +21,5 @@
     "noEmit": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "tests", "vite.config.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "vite-plugins", "vite.config.mts", "vitest.config.mts"]
 }

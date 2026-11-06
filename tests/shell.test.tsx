@@ -67,4 +67,14 @@ describe("墨页 shell", () => {
 
     expect(root.querySelector(".preview-paper")).not.toBeNull();
   });
+
+  it("renders the fixed mixed fixture into the preview through the shared seam", () => {
+    const root = mount();
+    const document = root.querySelector(".preview-paper .pdf-doc");
+
+    expect(document?.querySelector("h1")?.textContent).toBe("混合结构基线");
+    expect(document?.querySelector("table")).not.toBeNull();
+    expect(document?.querySelector("img")?.getAttribute("src")).toBe("assets/block.png");
+    expect(root.querySelector('[data-action="export"]')).not.toBeNull();
+  });
 });
