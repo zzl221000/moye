@@ -74,10 +74,84 @@ export type DocExportOptions = {
   onProgress?: (progress: ExportProgress) => void;
 };
 
+export type PageConfigInput = {
+  cover: boolean;
+  headerTitle: string;
+  headerColor: string;
+  footerColor: string;
+};
+
 export type DocExportApi = {
   metrics(paper: string, marginPt: number): PaperMetrics;
   exportElement(source: HTMLElement, options: DocExportOptions): Promise<Blob>;
   countPages(blob: Blob): Promise<number>;
+  /** Frozen `buildPageConfig`; the same object the export hands to dompdf. */
+  buildPageConfig?(
+    options: PageConfigInput,
+    hasHeader: boolean,
+    hasFooter: boolean,
+  ): unknown;
+  papers?: Readonly<
+    Record<
+      string,
+      { readonly widthPt: number; readonly heightPt: number; readonly format?: unknown }
+    >
+  >;
+  HEADER_HEIGHT?: number;
+  FOOTER_HEIGHT?: number;
+};
+
+export type SnapshotLineData = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  start: number;
+  end: number;
+};
+
+export type SnapshotNodeData = {
+  id: number;
+  parent: number;
+  kind: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  divisionDisable: boolean;
+  pageBreak: boolean;
+  overflowHidden: boolean;
+  lines?: SnapshotLineData[];
+};
+
+export type SnapshotData = {
+  pageWidthPt: number;
+  pageHeightPt: number;
+  mTop: number;
+  mRight: number;
+  mBottom: number;
+  mLeft: number;
+  headerHPx: number;
+  footerHPx: number;
+  nodes: SnapshotNodeData[];
+};
+
+export type DompdfApi = {
+  collectSnapshotData(
+    root: HTMLElement,
+    options?: Record<string, unknown>,
+  ): Promise<SnapshotData>;
+  computePageBreaks(
+    root: HTMLElement,
+    options?: Record<string, unknown>,
+  ): number[];
+};
+
+export type PrepareDocApi = {
+  prepare(
+    root: HTMLElement,
+    options?: { pageBreakOnH1?: boolean },
+  ): HTMLElement;
 };
 
 declare global {
@@ -85,6 +159,8 @@ declare global {
   var DOMPurify: PurifyApi | undefined;
   var MOYE_THEMES: ThemeTable | undefined;
   var DocExport: DocExportApi | undefined;
+  var dompdf: DompdfApi | undefined;
+  var PrepareDoc: PrepareDocApi | undefined;
 }
 
 export {};

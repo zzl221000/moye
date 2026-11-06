@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "smoke:writing": "node tests/smoke-writing.mjs",
-    "test:e2e": "bun run build && node tests/e2e.mjs"
+    "test:e2e": "bun run build && node tests/e2e.mjs",
+    "test:pagination": "bun run build && node tests/e2e.mjs --pagination"
   },
   "dependencies": {
     "@quirekit/msfe-core": "0.0.1",

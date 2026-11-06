@@ -487,20 +487,22 @@ body.is-resizing {
 
 .preview-stack {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--moye-space-group);
   min-width: 0;
 }
 
-/* A continuous sheet at the selected paper size. The export uses the same
-   content column; the preview scales the whole sheet with `zoom`, which keeps
-   every line break identical to the PDF while fitting the pane. */
+/* One sheet at the selected paper size. The export uses the same content
+   column; the preview scales every sheet with `zoom`, which keeps every line
+   break identical to the PDF while fitting the pane. */
 .preview-paper {
   position: relative;
   display: flex;
   flex: none;
   flex-direction: column;
   width: var(--moye-preview-paper-width);
-  min-height: var(--moye-preview-paper-height);
+  height: var(--moye-preview-paper-height);
   padding: var(--moye-preview-paper-margin);
   zoom: var(--moye-preview-zoom, 1);
   border-radius: var(--moye-radius-page);
@@ -508,13 +510,42 @@ body.is-resizing {
   box-shadow: var(--moye-elevation-paper);
 }
 
+/* The fallback keeps the old continuous sheet: its height follows content. */
+.preview-paper--continuous {
+  height: auto;
+  min-height: var(--moye-preview-paper-height);
+}
+
 .preview-paper__content {
   flex: none;
   min-width: 0;
 }
 
-/* First-page bands only: the preview is still one continuous sheet, so these
-   mirror the export's header/footer instead of trying to paginate. */
+/* Reserved header/footer bands. On a cover page the slot keeps its height so
+   content starts where dompdf starts it, while the band itself is absent. */
+.preview-paper__band-slot {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.preview-page__viewport {
+  position: relative;
+  flex: none;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.preview-page__slice {
+  overflow: hidden;
+}
+
+.preview-paper--page .preview-paper__content {
+  will-change: transform;
+}
+
 .preview-paper__band {
   display: flex;
   flex: none;
@@ -526,6 +557,10 @@ body.is-resizing {
   white-space: nowrap;
 }
 
+.preview-paper__band-slot .preview-paper__band {
+  flex: 1;
+}
+
 .preview-paper__band--header {
   justify-content: flex-start;
   font-size: 10px;
@@ -533,31 +568,11 @@ body.is-resizing {
 
 .preview-paper__band--footer {
   justify-content: center;
-  margin-top: auto;
   font-size: 9px;
 }
 
-/* A forced page break is the one pagination rule that is already known before
-   dompdf runs, so the continuous preview can mark it without pretending to
-   know the real page boundaries. The marker is drawn outside the flow. */
-.preview-paper[data-h1-break="true"]
-  .preview-paper__content
-  .pdf-doc
-  > h1:not(:first-of-type) {
-  position: relative;
-}
-
-.preview-paper[data-h1-break="true"]
-  .preview-paper__content
-  .pdf-doc
-  > h1:not(:first-of-type)::before {
-  content: "";
-  position: absolute;
-  top: -16px;
-  right: 0;
-  left: 0;
-  border-top: 1px dashed var(--moye-color-border-strong);
-  pointer-events: none;
+.preview-paper--continuous .preview-paper__band--footer {
+  margin-top: auto;
 }
 
 .preview-paper::after {

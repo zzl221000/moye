@@ -57,6 +57,11 @@ const SETTINGS_FIXTURE = [
   "第三章的正文。",
 ].join("\n");
 
+const LONG_FIXTURE = fs.readFileSync(
+  path.join(__dirname, "fixtures", "long.md"),
+  "utf8",
+);
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -388,17 +393,22 @@ async function main() {
           `(() => {
             const doc = document.querySelector(".preview-paper .pdf-doc");
             const status = document.querySelector(".statusbar")?.textContent ?? "";
-            const pages = Number((status.match(/≈\\s*(\\d+)\\s*页/) ?? [])[1] ?? 0);
+            const pages = Number((status.match(/(?:≈\\s*)?(\\d+)\\s*页/) ?? [])[1] ?? 0);
             return {
               heading: doc?.querySelector("h1")?.textContent ?? "",
               text: doc?.textContent ?? "",
               pages,
+              exact: document.getElementById("preview-pane")?.getAttribute("data-pagination-state") === "exact",
+              cards: document.querySelectorAll("[data-preview-page]").length,
+              pageCount: Number(document.getElementById("preview-pane")?.getAttribute("data-page-count") ?? 0),
             };
           })()`,
         );
         return state.heading === "中文标题" &&
           state.text.includes("段落包含") &&
-          state.pages >= 1
+          state.exact &&
+          state.pages >= 1 &&
+          state.cards === state.pageCount
           ? state
           : null;
       },
@@ -802,14 +812,19 @@ async function main() {
             return {
               heading: doc?.querySelector("h1")?.textContent ?? "",
               text: doc?.textContent ?? "",
-              pages: Number((status.match(/≈\\s*(\\d+)\\s*页/) ?? [])[1] ?? 0),
+              pages: Number((status.match(/(?:≈\\s*)?(\\d+)\\s*页/) ?? [])[1] ?? 0),
               characters: Number((status.match(/(\\d+)\\s*字/) ?? [])[1] ?? 0),
+              exact: document.getElementById("preview-pane")?.getAttribute("data-pagination-state") === "exact",
+              cards: document.querySelectorAll("[data-preview-page]").length,
+              pageCount: Number(document.getElementById("preview-pane")?.getAttribute("data-page-count") ?? 0),
             };
           })()`,
         );
         return state.heading === "分页估算" &&
           state.text.includes("分页标记") &&
+          state.exact &&
           state.pages >= 2 &&
+          state.cards === state.pageCount &&
           state.characters > 500
           ? state
           : null;
@@ -817,6 +832,48 @@ async function main() {
       10_000,
       "键入后预览与页数估算更新",
     );
+
+    // Repagination cost on the long fixture. The runtime and font are already
+    // loaded here, so this is the incremental snapshot + pack cost, not first
+    // load. The acceptance budget is 300 ms; the debounce is separate.
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moye.replace(${JSON.stringify(LONG_FIXTURE)})`,
+    );
+    const longTiming = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const status = document.querySelector(".statusbar")?.textContent ?? "";
+            return {
+              heading: document.querySelector(".preview-paper .pdf-doc h1")?.textContent ?? "",
+              exact: pane?.getAttribute("data-pagination-state") === "exact",
+              cards: document.querySelectorAll("[data-preview-page]").length,
+              pageCount: Number(pane?.getAttribute("data-page-count") ?? 0),
+              ms: Number(pane?.getAttribute("data-pagination-ms") ?? 0),
+              pages: Number((status.match(/(?:≈\\s*)?(\\d+)\\s*页/) ?? [])[1] ?? 0),
+            };
+          })()`,
+        );
+        return state.heading === "长文档基线" &&
+          state.exact &&
+          state.pageCount === 5 &&
+          state.cards === state.pageCount &&
+          state.pages === state.pageCount &&
+          state.ms > 0
+          ? state
+          : null;
+      },
+      15_000,
+      "长文档重新分页",
+    );
+    if (longTiming.ms >= 300) {
+      throw new Error(`长文档重新分页超过 300ms：${longTiming.ms}ms`);
+    }
 
     // Synced scrolling: scrolling either pane moves the other by the fraction
     // of its scroll range, with no visible control.
@@ -1499,7 +1556,8 @@ async function main() {
       "预览切换文档主题",
     );
 
-    // H1 break: marked before every H1 after the first, and passed to export.
+    // H1 break: every H1 after the first starts a new page. The preview
+    // repaginates from the same pageBreak attributes the export uses.
     await evaluate(
       cdp,
       sessionId,
@@ -1515,23 +1573,33 @@ async function main() {
           cdp,
           sessionId,
           `(() => {
-            const paper = document.querySelector(".preview-paper");
-            const headings = [...paper.querySelectorAll(".preview-paper__content .pdf-doc > h1")];
-            return {
-              flag: paper.getAttribute("data-h1-break"),
-              headings: headings.length,
-              markers: headings.slice(1).every(
-                (heading) => getComputedStyle(heading, "::before").borderTopStyle === "dashed",
+            const pane = document.getElementById("preview-pane");
+            const cards = document.querySelectorAll("[data-preview-page]");
+            const headings = [
+              ...document.querySelectorAll(
+                '[data-preview-page="1"] .pdf-doc > h1',
               ),
+            ];
+            return {
+              flag: document.querySelector(".preview-paper")?.getAttribute("data-h1-break"),
+              headings: headings.length,
+              exact: pane?.getAttribute("data-pagination-state") === "exact",
+              cards: cards.length,
+              pageCount: Number(pane?.getAttribute("data-page-count") ?? 0),
+              starts: pane?.getAttribute("data-page-starts") ?? "",
             };
           })()`,
         );
-        return state.flag === "true" && state.headings === 3 && state.markers
+        return state.flag === "true" &&
+          state.headings === 3 &&
+          state.exact &&
+          state.pageCount >= 3 &&
+          state.cards === state.pageCount
           ? state
           : null;
       },
       5_000,
-      "预览标记一级标题另起页",
+      "预览按一级标题重新分页",
     );
 
     const exportSettings = await evaluate(
@@ -1668,30 +1736,53 @@ async function main() {
       throw new Error(`设置面板没有恢复：${JSON.stringify(restoredControls)}`);
     }
 
-    // First-page bands mirror the export's resolved title/footer and hide with
-    // the cover option; they must not need a second pagination model.
+    // Per-page bands mirror the export's resolved title/footer. With the
+    // cover option only page 1 loses them; every later page keeps its own
+    // number.
     await evaluate(
       cdp,
       sessionId,
       `window.__moye.replace(${JSON.stringify(SETTINGS_FIXTURE)})`,
     );
-    await waitFor(
-      async () =>
-        evaluate(
+    const coverBands = await waitFor(
+      async () => {
+        const state = await evaluate(
           cdp,
           sessionId,
-          `document.querySelector(".preview-paper .pdf-doc h1")?.textContent === "第一章 起点"`,
-        ),
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const cards = [...document.querySelectorAll("[data-preview-page]")];
+            if (cards.length < 2) return null;
+            return {
+              exact: pane?.getAttribute("data-pagination-state") === "exact",
+              count: Number(pane?.getAttribute("data-page-count") ?? 0),
+              cards: cards.length,
+              bands: cards.map((card) => ({
+                count: card.querySelectorAll("[data-preview-band]").length,
+                header: card.querySelector('[data-preview-band="header"]')?.textContent?.trim() ?? "",
+                footer: card.querySelector('[data-preview-band="footer"]')?.textContent?.trim() ?? "",
+              })),
+            };
+          })()`,
+        );
+        return state?.exact &&
+          state.cards === state.count &&
+          state.bands[0].count === 0 &&
+          state.bands.slice(1).every((band) => band.count === 2)
+          ? state
+          : null;
+      },
       10_000,
-      "页眉页脚 fixture 进入预览",
+      "封面页无页眉页脚，其余页有",
     );
-    const hiddenBands = await evaluate(
-      cdp,
-      sessionId,
-      `document.querySelectorAll("[data-preview-band]").length`,
-    );
-    if (hiddenBands !== 0) {
-      throw new Error("首页不显示页眉页脚开启时仍出现预览页眉页脚");
+    if (
+      coverBands.bands.slice(1).some(
+        (band, index) =>
+          band.header !== "第一章 起点" ||
+          band.footer !== `第 ${index + 2} 页`,
+      )
+    ) {
+      throw new Error(`逐页页眉页脚不对：${JSON.stringify(coverBands.bands)}`);
     }
     await evaluate(
       cdp,
@@ -1708,24 +1799,33 @@ async function main() {
           cdp,
           sessionId,
           `(() => {
-            const header = document.querySelector('[data-preview-band="header"]');
-            const footer = document.querySelector('[data-preview-band="footer"]');
+            const pane = document.getElementById("preview-pane");
+            const cards = [...document.querySelectorAll("[data-preview-page]")];
+            const header = cards[0]?.querySelector('[data-preview-band="header"]');
+            const footer = cards[0]?.querySelector('[data-preview-band="footer"]');
             return header && footer
               ? {
+                  exact: pane?.getAttribute("data-pagination-state") === "exact",
+                  cards: cards.length,
                   header: header.textContent?.trim() ?? "",
                   footer: footer.textContent?.trim() ?? "",
                   headerHeight: header.getBoundingClientRect().height,
                   footerHeight: footer.getBoundingClientRect().height,
+                  secondFooter:
+                    cards[1]?.querySelector('[data-preview-band="footer"]')?.textContent?.trim() ?? "",
                 }
               : null;
           })()`,
         );
-        return state?.header === "第一章 起点" && state.footer === "第 1 页"
+        return state?.exact &&
+          state.header === "第一章 起点" &&
+          state.footer === "第 1 页" &&
+          state.secondFooter === "第 2 页"
           ? state
           : null;
       },
       5_000,
-      "预览显示首页页眉页脚",
+      "预览显示逐页页眉页脚",
     );
     await evaluate(
       cdp,
@@ -1741,10 +1841,16 @@ async function main() {
         evaluate(
           cdp,
           sessionId,
-          `document.querySelector('[data-preview-band="header"]')?.textContent?.trim() === "自定义页眉"`,
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const headers = [...document.querySelectorAll('[data-preview-band="header"]')];
+            return pane?.getAttribute("data-pagination-state") === "exact" &&
+              headers.length > 0 &&
+              headers.every((header) => header.textContent?.trim() === "自定义页眉");
+          })()`,
         ),
       5_000,
-      "预览跟随自定义页眉标题",
+      "预览逐页跟随自定义页眉标题",
     );
     await evaluate(
       cdp,
@@ -1760,7 +1866,13 @@ async function main() {
         evaluate(
           cdp,
           sessionId,
-          `document.querySelector('[data-preview-band="header"]')?.textContent?.trim() === "第一章 起点"`,
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const headers = [...document.querySelectorAll('[data-preview-band="header"]')];
+            return pane?.getAttribute("data-pagination-state") === "exact" &&
+              headers.length > 0 &&
+              headers.every((header) => header.textContent?.trim() === "第一章 起点");
+          })()`,
         ),
       5_000,
       "预览回退到第一个一级标题",
@@ -1776,14 +1888,26 @@ async function main() {
       })()`,
     );
     await waitFor(
-      async () =>
-        evaluate(
+      async () => {
+        const state = await evaluate(
           cdp,
           sessionId,
-          `!document.querySelector('[data-preview-band="footer"]')`,
-        ),
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            return {
+              exact: pane?.getAttribute("data-pagination-state") === "exact",
+              footers: document.querySelectorAll('[data-preview-band="footer"]').length,
+              headers: document.querySelectorAll('[data-preview-band="header"]').length,
+              cards: document.querySelectorAll("[data-preview-page]").length,
+            };
+          })()`,
+        );
+        return state.exact && state.footers === 0 && state.headers === state.cards
+          ? state
+          : null;
+      },
       5_000,
-      "页脚页码关闭后预览隐藏页脚",
+      "页脚页码关闭后每页隐藏页脚",
     );
     await evaluate(
       cdp,
@@ -1795,12 +1919,28 @@ async function main() {
       })()`,
     );
     await waitFor(
-      async () =>
-        evaluate(
+      async () => {
+        const state = await evaluate(
           cdp,
           sessionId,
-          `document.querySelector('[data-preview-band="footer"]')?.textContent?.trim() === "第 1 页"`,
-        ),
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const cards = [...document.querySelectorAll("[data-preview-page]")];
+            return {
+              exact: pane?.getAttribute("data-pagination-state") === "exact",
+              footers: cards.map(
+                (card) =>
+                  card.querySelector('[data-preview-band="footer"]')?.textContent?.trim() ?? "",
+              ),
+            };
+          })()`,
+        );
+        return state.exact &&
+          state.footers.length > 0 &&
+          state.footers.every((footer, index) => footer === `第 ${index + 1} 页`)
+          ? state
+          : null;
+      },
       5_000,
       "页脚页码恢复",
     );
@@ -1815,14 +1955,33 @@ async function main() {
       })()`,
     );
     await waitFor(
-      async () =>
-        evaluate(
+      async () => {
+        const state = await evaluate(
           cdp,
           sessionId,
-          `document.querySelectorAll("[data-preview-band]").length === 0`,
-        ),
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const cards = [...document.querySelectorAll("[data-preview-page]")];
+            return {
+              exact: pane?.getAttribute("data-pagination-state") === "exact",
+              count: Number(pane?.getAttribute("data-page-count") ?? 0),
+              cards: cards.length,
+              first: cards[0]?.querySelectorAll("[data-preview-band]").length ?? -1,
+              rest: cards.slice(1).map(
+                (card) => card.querySelectorAll("[data-preview-band]").length,
+              ),
+            };
+          })()`,
+        );
+        return state.exact &&
+          state.cards === state.count &&
+          state.first === 0 &&
+          state.rest.every((count) => count === 2)
+          ? state
+          : null;
+      },
       5_000,
-      "封面选项隐藏预览页眉页脚",
+      "封面选项只隐藏首页页眉页脚",
     );
 
     await evaluate(
@@ -1835,6 +1994,83 @@ async function main() {
         evaluate(cdp, sessionId, `!document.querySelector("#settings-dialog")?.open`),
       5_000,
       "关闭设置按钮",
+    );
+
+    // If the snapshot API disappears or throws, the pane returns to the
+    // continuous sheet and the status bar restores the ≈ estimate. Nothing
+    // extra is shown to the user.
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        window.__moyeCollectSnapshotData = window.dompdf.collectSnapshotData;
+        window.dompdf.collectSnapshotData = undefined;
+      })()`,
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moye.replace(${JSON.stringify(`${SETTINGS_FIXTURE}\n\n分页回退检查`)} )`,
+    );
+    const fallbackState = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const status = document.querySelector(".statusbar")?.textContent ?? "";
+            return {
+              mode: pane?.getAttribute("data-pagination-state"),
+              continuous: Boolean(document.querySelector(".preview-paper--continuous")),
+              approximate: /≈\\s*\\d+\\s*页/.test(status),
+            };
+          })()`,
+        );
+        return state.mode === "continuous" && state.continuous && state.approximate
+          ? state
+          : null;
+      },
+      15_000,
+      "快照不可用时回退到连续预览",
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        window.dompdf.collectSnapshotData = window.__moyeCollectSnapshotData;
+      })()`,
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moye.replace(${JSON.stringify(SETTINGS_FIXTURE)})`,
+    );
+    await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const pane = document.getElementById("preview-pane");
+            const status = document.querySelector(".statusbar")?.textContent ?? "";
+            return {
+              mode: pane?.getAttribute("data-pagination-state"),
+              cards: document.querySelectorAll("[data-preview-page]").length,
+              count: Number(pane?.getAttribute("data-page-count") ?? 0),
+              approximate: status.includes("≈"),
+            };
+          })()`,
+        );
+        return state.mode === "exact" &&
+          state.cards === state.count &&
+          state.count > 0 &&
+          !state.approximate
+          ? state
+          : null;
+      },
+      15_000,
+      "恢复快照后重新分页",
     );
 
     // The file name is editable, the session normalizes it, and export uses it
@@ -1988,10 +2224,18 @@ async function main() {
     console.log(`  文档往返：${JSON.stringify(roundTrip.slice(0, 24))}…`);
     console.log(`  键入往返：${JSON.stringify(typed)}`);
     console.log(`  刷新恢复：${JSON.stringify(restored)}（${restoredShell.name}）`);
-    console.log(`  预览跟随：${preview.heading}，${preview.pages} 页`);
+    console.log(
+      `  预览跟随：${preview.heading}，${preview.pages} 页（页卡 ${preview.cards} 张，精确）`,
+    );
     console.log(`  分栏拖动：50% → ${draggedSplit.now}%，刷新后仍为 ${restoredShell.split}%`);
     console.log(
       `  键入后预览：${typedPreview.heading}，${typedPreview.characters} 字，${typedPreview.pages} 页`,
+    );
+    console.log(
+      `  长文档重新分页：${longTiming.pageCount} 页，snapshot ${longTiming.ms}ms`,
+    );
+    console.log(
+      `  回退：${fallbackState.mode}，连续预览 ${fallbackState.continuous}，估算页数 ${fallbackState.approximate}`,
     );
     console.log(
       `  联动滚动：写作面 ${Math.round(followedPreview.sourceTop)}px / ${followedPreview.sourceMax}px → 预览 ${Math.round(followedPreview.targetTop)}px；预览 ${Math.round(followedWriting.sourceTop)}px / ${followedWriting.sourceMax}px → 写作面 ${Math.round(followedWriting.targetTop)}px`,
@@ -2003,7 +2247,7 @@ async function main() {
     console.log("  中文标题、表格、任务列表、代码块与长链接换行均已投影");
     console.log("  Ctrl+S 写回、Ctrl+Shift+S 另存、Ctrl+O 打开、Ctrl+Shift+E 导出、拖入 Markdown 均通过");
     console.log(
-      `  预览页眉页脚：${JSON.stringify(previewBands)}（开启封面时隐藏）`,
+      `  预览页眉页脚：${JSON.stringify(previewBands)}（封面仅隐藏第 1 页，共 ${coverBands.bands.length} 页）`,
     );
     console.log(
       `  导出：${path.basename(exportedPdf)}，进度条 ${JSON.stringify(exportProgress)}，失败提示 ${JSON.stringify(exportFailure.text)}，重试后 ${JSON.stringify(retryState)}`,
@@ -2020,7 +2264,7 @@ async function main() {
       `  设置预览：${landscapePreview.width}×${landscapePreview.height}，边距 ${restoredSettings.margin}，主题 ${themePreview.control}`,
     );
     console.log(
-      `  一级标题另起页：${breakPreview.headings} 个标题，后续标题均带分页标记 ${breakPreview.markers}`,
+      `  一级标题另起页：${breakPreview.headings} 个标题，预览 ${breakPreview.pageCount} 页（页卡 ${breakPreview.cards} 张）`,
     );
     console.log(
       `  设置持久化：${restoredSettings.options.paper} / ${restoredSettings.options.margin} / ${restoredSettings.options.theme} / 页眉 ${JSON.stringify(exportSettings.headerTitle)}`,

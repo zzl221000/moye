@@ -30,7 +30,7 @@ import { countCharacters } from "./writing/count";
 import { browserDraftStorage, readDraft } from "./writing/draft";
 import { FALLBACK_FILE_NAME } from "./writing/filename";
 import type { WritingSession, WritingState } from "./writing/session";
-import PreviewPane from "./shell/PreviewPane";
+import PreviewPane, { type PageCountState } from "./shell/PreviewPane";
 import SettingsPanel, { type ThemeChoice } from "./shell/SettingsPanel";
 import StatusBar from "./shell/StatusBar";
 import TopBar from "./shell/TopBar";
@@ -112,7 +112,10 @@ export default function App() {
   const previewPageHeight = createMemo(() =>
     pageContentHeight(previewPaper(), hasPageBands()),
   );
-  const [pages, setPages] = createSignal(0);
+  const [pageState, setPageState] = createSignal<PageCountState>({
+    pages: 0,
+    exact: false,
+  });
   const [split, setSplit] = createSignal(readSplit(splitStorage));
   const [resizing, setResizing] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
@@ -362,20 +365,22 @@ export default function App() {
           <PreviewPane
             document={previewDocument()}
             paper={previewPaper()}
+            paperKind={options().paper}
             background={previewBackground()}
             pageContentHeightPx={previewPageHeight()}
             h1Break={options().pageBreakOnH1}
             headerTitle={previewHeaderTitle()}
             pageNumbers={options().pageNumbers}
             cover={options().cover}
-            onPageEstimate={(count) => setPages(count)}
+            onPageState={(state) => setPageState(state)}
           />
         </main>
 
         <StatusBar
           fileName={docState().name}
           characters={countCharacters(docState().markdown)}
-          pages={pages()}
+          pages={pageState().pages}
+          pagesExact={pageState().exact}
           saveState={docState().saveState}
           exportError={exportError()}
         />

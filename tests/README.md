@@ -1,6 +1,6 @@
 # 测试
 
-本仓库有三条验证线：写作面冒烟、共享渲染快照、PDF 导出基线。
+本仓库有四条验证线：写作面冒烟、共享渲染快照、PDF 导出基线、预览分页与导出一致性。
 
 ## 写作面冒烟
 
@@ -16,14 +16,14 @@ bun run smoke:writing
 MOYE_SMOKE_SCREENSHOT=writing.png MOYE_SMOKE_SCREENSHOT_EMPTY=empty.png bun run smoke:writing
 ```
 
-脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影与右侧版式预览，然后拖动分隔条并断言比例写入 `localStorage`；接着用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，确认顶栏文件名可编辑，再用 `Ctrl+Shift+E` 触发导出并检查进度条与下载的 PDF；键入 `中文 ABC 123` 后等待草稿写入，刷新页面并断言 `getMarkdown()`、文件名与分栏比例都恢复；最后键入一份长文档，断言预览出现新标题、状态栏字数增长且页数估算随内容高度增加。窗口改为 800px 宽时还会断言写作面在上、预览在下、分隔条隐藏。插入按钮的检查（链接、图片、表格、代码块的标准 Markdown、链接对话框的 Enter/Escape 与焦点回归、表格替换选区、代码块包裹选区）也在同一脚本内。
+脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影与右侧版式预览，然后拖动分隔条并断言比例写入 `localStorage`；接着用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，确认顶栏文件名可编辑，再用 `Ctrl+Shift+E` 触发导出并检查进度条与下载的 PDF；键入 `中文 ABC 123` 后等待草稿写入，刷新页面并断言 `getMarkdown()`、文件名与分栏比例都恢复；最后键入一份长文档，断言预览出现新标题、状态栏字数增长且页卡页数与状态栏精确页数一致；再载入 `long.md` 记录一次重新分页耗时，并临时移除 `collectSnapshotData` 验证回退到连续预览与 `≈` 页数，恢复后再确认重新分页。窗口改为 800px 宽时还会断言写作面在上、预览在下、分隔条隐藏。插入按钮的检查（链接、图片、表格、代码块的标准 Markdown、链接对话框的 Enter/Escape 与焦点回归、表格替换选区、代码块包裹选区）也在同一脚本内。
 
 前置条件：
 
 - Node.js 22+（脚本使用内置 `WebSocket` 驱动 DevTools）。
 - 本机安装 Chrome 或 Edge；找不到时用 `CHROME_PATH` 指向可执行文件。
 
-它不在 `bun run test` 里运行，因为浏览器不是单元测试环境的依赖。`bun run test` 只覆盖纯函数：文件名归一化、PDF 文件名、草稿读写、文件句柄能力降级、分栏比例的夹取与持久化、字数统计、页数估算，以及纸型尺寸与冻结导出表的契约。
+它不在 `bun run test` 里运行，因为浏览器不是单元测试环境的依赖。`bun run test` 只覆盖纯函数：文件名归一化、PDF 文件名、草稿读写、文件句柄能力降级、分栏比例的夹取与持久化、字数统计、页切分器（合成行盒）、页配置与纸型对冻结导出表的契约。
 
 ## 应用端到端导出
 
@@ -37,6 +37,7 @@ bun run test:e2e            # 先 vite build，再跑应用导出
 node tests/e2e.mjs          # 假设 dist/ 已经是最新构建
 node tests/e2e.mjs --keep   # 保留下载的 PDF 与临时 Chrome 目录
 node tests/e2e.mjs --ci     # CI 模式：页数 + 关键文本
+node tests/e2e.mjs --pagination  # 四份 fixture + 纸张/边距/页眉页脚变体：预览页数 = PDF 页数
 ```
 
 它会：
@@ -53,6 +54,8 @@ node tests/e2e.mjs --ci     # CI 模式：页数 + 关键文本
 退出码：`0` 通过；`1` PDF 或文本不匹配；`2` 缺少构建、Chrome、`pdftotext` 或参数错误。
 
 `--ci` 只断言页数与 13 段关键文本（去掉所有空白后做子串匹配）。不同 `pdftotext` 实现可能改变换行位置，所以 CI 用这个模式；本地默认模式仍做逐页精确比对。
+
+`--pagination` 为每个用例建立独立的 browser context，写入 fixture 草稿后刷新，读取预览的 `data-page-count` 与页卡数量，再真实点击导出，用 PDF 页数比对。它覆盖 `simple`、`mixed`、`long`、`multi-h1`，以及 A4 横向/零边距、Letter/18pt、封面、页脚开关与一级标题另起页。
 
 `bun run test` 不包含端到端导出；它跑共享接缝的三份 fixture 快照。
 
@@ -168,6 +171,7 @@ CI 需要：Node 22+、Chrome/Edge（可设 `CHROME_PATH`）、`pdftotext`（通
 node tests/compare.mjs      # CLI 基线
 bun run test:e2e            # 应用导出（精确文本）
 node tests/e2e.mjs --ci     # 应用导出（页数 + 关键文本，GitHub Actions 使用）
+node tests/e2e.mjs --pagination  # 预览分页 = 导出页数（GitHub Actions 使用）
 ```
 
 不需要 `npm install`，也不访问网络（安装依赖与 Chrome 除外）。

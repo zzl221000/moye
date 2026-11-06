@@ -6,8 +6,10 @@ type StatusBarProps = {
   fileName: string;
   /** Non-whitespace characters in the current Markdown source. */
   characters: number;
-  /** Estimate from the preview's laid-out height; pagination belongs to dompdf. */
+  /** Page count from the current dompdf snapshot, or an estimate when absent. */
   pages: number;
+  /** True only while `pages` came from a current snapshot. */
+  pagesExact: boolean;
   saveState: SaveState;
   /** One actionable sentence; cleared by the shell when an export retries. */
   exportError?: string | null;
@@ -41,7 +43,9 @@ export default function StatusBar(props: StatusBarProps) {
       <span class="statusbar__spacer" aria-hidden="true" />
 
       <span class="statusbar__meta">{props.characters} 字</span>
-      <span class="statusbar__meta">≈{props.pages} 页</span>
+      <span class="statusbar__meta">
+        {props.pagesExact ? `${props.pages} 页` : `≈${props.pages} 页`}
+      </span>
     </footer>
   );
 }

@@ -10,11 +10,11 @@ export const PAGE_CONTENT_HEIGHT_PX =
 /**
  * Page count estimate for the status bar.
  *
- * The preview is one continuous sheet, so its laid-out content height divided
- * by one page's content height is only an estimate: real pagination belongs to
- * dompdf (docs/adr/0001-export-authority-dompdf.md). The estimate deliberately
- * ignores covering headers/footers and break-avoid rules, and returns 0 for an
- * empty document instead of claiming one blank page.
+ * Used only when dompdf's snapshot API is unavailable and the preview falls
+ * back to one continuous sheet. Its laid-out content height divided by one
+ * page's content height is an estimate: real pagination belongs to dompdf
+ * (docs/adr/0001-export-authority-dompdf.md). It ignores break-avoid rules and
+ * returns 0 for an empty document instead of claiming one blank page.
  */
 export function estimatePageCount(
   contentHeightPx: number,

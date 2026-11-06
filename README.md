@@ -12,7 +12,7 @@ moye/
 ├─ src/
 │  ├─ main.tsx            应用入口
 │  ├─ App.tsx             外壳装配与状态
-│  ├─ doc/                渲染接缝、导出、设置、纸型、页数估算
+│  ├─ doc/                渲染接缝、导出、设置、纸型、分页几何
 │  ├─ shell/              顶栏、写作面、插入栏、版式预览、设置、状态栏
 │  ├─ writing/            草稿、文件读写、插入、统计
 │  └─ styles/             设计 token 与应用样式
@@ -42,6 +42,7 @@ bun run preview         # 预览 dist/，同样在 /moye/
 bun run typecheck
 bun run test
 bun run test:e2e        # 构建 → 无头浏览器 → 导出 PDF → 比对基线
+bun run test:pagination # 构建 → 逐 fixture 比较预览页数与导出 PDF 页数
 bun run smoke:writing   # 写作面冒烟，需要 Chrome/Edge
 ```
 
@@ -106,7 +107,8 @@ CLI 起一个临时 HTTP 服务，用 headless Chrome 打开导出页，再调�
 ## 导出链路
 
 - 预览与导出共用 `src/doc/render.ts`：Markdown 经 marked 解析、DOMPurify 净化，得到 `.pdf-doc` HTML。
-- 导出时把同一份 HTML 交给冻结的 `export-doc.js` 与 `vendor/dompdf.min.js`；分页只由 dompdf 决定，预览不模拟页边界。
+- 导出时把同一份 HTML 交给冻结的 `export-doc.js` 与 `vendor/dompdf.min.js`；分页只由 dompdf 决定。
+- 版式预览调用 dompdf 的 `collectSnapshotData()` 读取它实测的行盒与页眉/页脚高度，按同一内容高度切成页卡；预览不自行断行或计算页边界。
 - CLI `export.mjs` 在 headless Chrome 里运行同一条链路。
 - `themes.js` 提供文档主题，`styles/doc.css` 是预览与 PDF 共用的文档排版。
 
@@ -114,7 +116,7 @@ CLI 起一个临时 HTTP 服务，用 headless Chrome 打开导出页，再调�
 
 - 跨页表格不会重复表头，长表格的第二页直接从数据行开始。
 - File System Access API 只有 Chromium 系完整支持，写回需要 HTTPS 或 localhost。
-- 状态栏页数由预览高度估算，最终页数以 dompdf 导出为准。
+- 状态栏页数来自 dompdf 快照，与导出页数一致；快照 API 不可用时退回连续预览，页数前带 `≈`。
 - 不支持 Mermaid、KaTeX、Obsidian 双链等扩展语法；新增语法需要扩展共享渲染接缝。
 - 远程图片需要服务端返回 CORS 头，否则会被跳过。
 - 字体只打包了思源黑体 Regular，粗体由渲染器合成。
