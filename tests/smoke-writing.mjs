@@ -43,6 +43,20 @@ const FIXTURE = [
 
 const TYPED = "中文 ABC 123";
 
+const SETTINGS_FIXTURE = [
+  "# 第一章 起点",
+  "",
+  "第一章的正文。",
+  "",
+  "# 第二章 转折",
+  "",
+  "第二章的正文。",
+  "",
+  "# 第三章 收束",
+  "",
+  "第三章的正文。",
+].join("\n");
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1019,6 +1033,371 @@ async function main() {
       "代码块包裹选区",
     );
 
+    // Settings: three groups, live preview, persisted export options and the
+    // first-H1 fallback. The fixture has several H1s on purpose.
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moye.replace(${JSON.stringify(SETTINGS_FIXTURE)})`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelector(".preview-paper .pdf-doc h1")?.textContent === "第一章 起点"`,
+        ),
+      10_000,
+      "设置 fixture 进入预览",
+    );
+
+    const workspaceBefore = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const rect = document.querySelector(".workspace").getBoundingClientRect();
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        };
+      })()`,
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('[data-action="settings"]')?.click()`,
+    );
+    const settingsOpen = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const dialog = document.querySelector("#settings-dialog");
+            const active = document.activeElement;
+            return {
+              open: Boolean(dialog?.open),
+              focus: active?.id ?? "",
+              inside: Boolean(dialog && active && dialog.contains(active)),
+              groups: [...document.querySelectorAll("#settings-dialog .settings-group__title")].map(
+                (element) => element.textContent,
+              ),
+              toggle: document.querySelector('[data-action="settings"]')?.getAttribute("aria-expanded"),
+              text: dialog?.textContent ?? "",
+            };
+          })()`,
+        );
+        return state.open && state.focus === "setting-paper" ? state : null;
+      },
+      5_000,
+      "设置对话框打开并聚焦第一项",
+    );
+    if (
+      !settingsOpen.inside ||
+      settingsOpen.groups.join("|") !== "纸张|版式|文档" ||
+      settingsOpen.toggle !== "true"
+    ) {
+      throw new Error(`设置分组不对：${JSON.stringify(settingsOpen)}`);
+    }
+    if (settingsOpen.text.includes("编辑模式") || settingsOpen.text.includes("同步滚动")) {
+      throw new Error("设置里仍出现已删除的编辑模式或同步滚动");
+    }
+    const workspaceAfter = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const rect = document.querySelector(".workspace").getBoundingClientRect();
+        const dialog = document.querySelector("#settings-dialog").getBoundingClientRect();
+        return {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+          dialogWidth: Math.round(dialog.width),
+          dialogHeight: Math.round(dialog.height),
+        };
+      })()`,
+    );
+    if (
+      workspaceAfter.x !== workspaceBefore.x ||
+      workspaceAfter.y !== workspaceBefore.y ||
+      workspaceAfter.width !== workspaceBefore.width ||
+      workspaceAfter.height !== workspaceBefore.height ||
+      workspaceAfter.dialogWidth <= 0 ||
+      workspaceAfter.dialogHeight <= 0
+    ) {
+      throw new Error(
+        `设置对话框改变了布局：${JSON.stringify({ workspaceBefore, workspaceAfter })}`,
+      );
+    }
+
+    // Paper: the preview sheet takes the landscape width and height.
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-paper");
+        control.value = "a4-landscape";
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    const landscapePreview = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const paper = document.querySelector(".preview-paper");
+            return {
+              width: paper?.style.getPropertyValue("--moye-preview-paper-width"),
+              height: paper?.style.getPropertyValue("--moye-preview-paper-height"),
+            };
+          })()`,
+        );
+        return state.width === "1123px" && state.height === "794px" ? state : null;
+      },
+      5_000,
+      "预览切换到 A4 横向",
+    );
+
+    // Margin: no margin means no paper padding.
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-margin");
+        control.value = "0";
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    const marginPreview = await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelector(".preview-paper")?.style.getPropertyValue("--moye-preview-paper-margin") === "0px"`,
+        ),
+      5_000,
+      "预览页边距归零",
+    );
+    if (!marginPreview) throw new Error("预览没有应用无页边距");
+
+    // Theme: CSS and the page background are shared with the export.
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-theme");
+        control.value = "editorial";
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    const themePreview = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const paper = document.querySelector(".preview-paper");
+            return {
+              css: document.querySelector("#docTheme")?.textContent ?? "",
+              background: getComputedStyle(paper).backgroundColor,
+              control: document.querySelector("#setting-background")?.value,
+            };
+          })()`,
+        );
+        return state.css.includes("--accent: #8a3b22") &&
+          state.background === "rgb(253, 251, 247)" &&
+          state.control === "#fdfbf7"
+          ? state
+          : null;
+      },
+      5_000,
+      "预览切换文档主题",
+    );
+
+    // H1 break: marked before every H1 after the first, and passed to export.
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-h1-break");
+        control.checked = true;
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    const breakPreview = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const paper = document.querySelector(".preview-paper");
+            const headings = [...paper.querySelectorAll(".preview-paper__content .pdf-doc > h1")];
+            return {
+              flag: paper.getAttribute("data-h1-break"),
+              headings: headings.length,
+              markers: headings.slice(1).every(
+                (heading) => getComputedStyle(heading, "::before").borderTopStyle === "dashed",
+              ),
+            };
+          })()`,
+        );
+        return state.flag === "true" && state.headings === 3 && state.markers
+          ? state
+          : null;
+      },
+      5_000,
+      "预览标记一级标题另起页",
+    );
+
+    const exportSettings = await evaluate(
+      cdp,
+      sessionId,
+      `window.__moyeSettings?.getExportSettings() ?? null`,
+    );
+    if (
+      !exportSettings ||
+      exportSettings.paper !== "a4-landscape" ||
+      exportSettings.marginPt !== 0 ||
+      exportSettings.headerTitle !== "第一章 起点" ||
+      exportSettings.pageBreakOnH1 !== true ||
+      exportSettings.background !== "#fdfbf7" ||
+      exportSettings.pageNumbers !== true
+    ) {
+      throw new Error(`导出选项没有跟随设置：${JSON.stringify(exportSettings)}`);
+    }
+
+    // Escape closes the modal and returns focus to the settings button.
+    await pressEscape(cdp, sessionId);
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const dialog = document.querySelector("#settings-dialog");
+            const active = document.activeElement;
+            return (
+              !dialog?.open &&
+              active?.getAttribute("data-action") === "settings" &&
+              active?.getAttribute("aria-expanded") === "false"
+            );
+          })()`,
+        ),
+      5_000,
+      "Escape 关闭设置并归还焦点",
+    );
+
+    // Reload: every option comes back, and the preview is rebuilt from it.
+    const settingsReloadMark = `moye-settings-reload-${Date.now()}`;
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moyeSettingsReloadMark = ${JSON.stringify(settingsReloadMark)}`,
+    );
+    await cdp.send("Page.reload", { ignoreCache: true }, sessionId);
+    await waitFor(
+      async () => {
+        try {
+          const stillOld = await evaluate(
+            cdp,
+            sessionId,
+            `window.__moyeSettingsReloadMark === ${JSON.stringify(settingsReloadMark)}`,
+          );
+          return stillOld ? null : true;
+        } catch {
+          return null;
+        }
+      },
+      20_000,
+      "设置页重载",
+    );
+    const restoredSettings = await waitFor(
+      async () => {
+        try {
+          const state = await evaluate(
+            cdp,
+            sessionId,
+            `(() => {
+              const paper = document.querySelector(".preview-paper");
+              return {
+                options: window.__moyeSettings?.getOptions() ?? null,
+                width: paper?.style.getPropertyValue("--moye-preview-paper-width"),
+                margin: paper?.style.getPropertyValue("--moye-preview-paper-margin"),
+                h1Break: paper?.getAttribute("data-h1-break"),
+                background: getComputedStyle(paper).backgroundColor,
+              };
+            })()`,
+          );
+          return state.options?.paper === "a4-landscape" ? state : null;
+        } catch {
+          return null;
+        }
+      },
+      20_000,
+      "刷新后恢复设置",
+    );
+    if (
+      restoredSettings.width !== "1123px" ||
+      restoredSettings.margin !== "0px" ||
+      restoredSettings.h1Break !== "true" ||
+      restoredSettings.background !== "rgb(253, 251, 247)" ||
+      restoredSettings.options.theme !== "editorial" ||
+      restoredSettings.options.pageBreakOnH1 !== true
+    ) {
+      throw new Error(`刷新后的设置或预览不对：${JSON.stringify(restoredSettings)}`);
+    }
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('[data-action="settings"]')?.click()`,
+    );
+    const restoredControls = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const dialog = document.querySelector("#settings-dialog");
+            if (!dialog?.open) return null;
+            return {
+              paper: document.querySelector("#setting-paper")?.value,
+              margin: document.querySelector("#setting-margin")?.value,
+              theme: document.querySelector("#setting-theme")?.value,
+              background: document.querySelector("#setting-background")?.value,
+              h1Break: document.querySelector("#setting-h1-break")?.checked,
+            };
+          })()`,
+        );
+        return state?.paper === "a4-landscape" ? state : null;
+      },
+      5_000,
+      "设置面板恢复已存值",
+    );
+    if (
+      restoredControls.margin !== "0" ||
+      restoredControls.theme !== "editorial" ||
+      restoredControls.background !== "#fdfbf7" ||
+      restoredControls.h1Break !== true
+    ) {
+      throw new Error(`设置面板没有恢复：${JSON.stringify(restoredControls)}`);
+    }
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector("#settings-dialog .settings-dialog__close")?.click()`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(cdp, sessionId, `!document.querySelector("#settings-dialog")?.open`),
+      5_000,
+      "关闭设置按钮",
+    );
+
     console.log("✔ MSFE live 写作面冒烟通过");
     console.log(`  文档往返：${JSON.stringify(roundTrip.slice(0, 24))}…`);
     console.log(`  键入往返：${JSON.stringify(typed)}`);
@@ -1035,6 +1414,15 @@ async function main() {
     console.log(`  插入图片：${JSON.stringify(imageMarkdown.slice(0, 48))}…`);
     console.log(`  插入表格：${JSON.stringify(tableMarkdown)}`);
     console.log(`  插入代码块：${JSON.stringify(codeMarkdown)}`);
+    console.log(
+      `  设置预览：${landscapePreview.width}×${landscapePreview.height}，边距 ${restoredSettings.margin}，主题 ${themePreview.control}`,
+    );
+    console.log(
+      `  一级标题另起页：${breakPreview.headings} 个标题，后续标题均带分页标记 ${breakPreview.markers}`,
+    );
+    console.log(
+      `  设置持久化：${restoredSettings.options.paper} / ${restoredSettings.options.margin} / ${restoredSettings.options.theme} / 页眉 ${JSON.stringify(exportSettings.headerTitle)}`,
+    );
   } finally {
     if (cdp && targetId) {
       try {

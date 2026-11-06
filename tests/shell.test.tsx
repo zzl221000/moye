@@ -1,6 +1,7 @@
 import { render } from "@solidjs/web";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import App from "../src/App";
+import { OPTIONS_STORAGE_KEY } from "../src/doc/options";
 import { SPLIT_STORAGE_KEY } from "../src/shell/split";
 import { countCharacters } from "../src/writing/count";
 import { DRAFT_STORAGE_KEY } from "../src/writing/draft";
@@ -156,5 +157,122 @@ describe("墨页 shell", () => {
         .querySelector('[role="separator"]')
         ?.getAttribute("aria-valuenow"),
     ).toBe("52");
+  });
+
+  it("offers paper, layout and document groups with labels only", () => {
+    const root = mount();
+    const panel = root.querySelector("#settings-dialog");
+
+    expect(panel).toBeInstanceOf(HTMLDialogElement);
+    expect(panel?.getAttribute("aria-labelledby")).toBe("settings-title");
+    expect(
+      Array.from(
+        panel?.querySelectorAll(".settings-group__title") ?? [],
+        (heading) => heading.textContent,
+      ),
+    ).toEqual(["纸张", "版式", "文档"]);
+
+    expect(
+      Array.from(
+        panel?.querySelectorAll(
+          ".settings-field__label, .settings-switch__label",
+        ) ?? [],
+        (label) => label.textContent,
+      ),
+    ).toEqual([
+      "纸张",
+      "页边距",
+      "页眉标题",
+      "页脚页码",
+      "首页不显示页眉页脚",
+      "每个一级标题另起一页",
+      "文档主题",
+      "页面背景",
+      "细节 CSS",
+      "压缩 PDF 体积",
+    ]);
+
+    const advanced = panel?.querySelector("details");
+    expect(advanced?.querySelector("summary")?.textContent).toBe("高级");
+    expect(advanced?.querySelector("#setting-custom-css")).not.toBeNull();
+    expect(panel?.textContent).not.toContain("编辑模式");
+    expect(panel?.textContent).not.toContain("同步滚动");
+    expect(panel?.querySelectorAll("p")).toHaveLength(0);
+
+    const trigger = root.querySelector('[data-action="settings"]');
+    expect(trigger?.getAttribute("aria-haspopup")).toBe("dialog");
+    expect(trigger?.getAttribute("aria-controls")).toBe("settings-dialog");
+    expect(trigger?.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("applies paper, margin, theme and H1 breaks to the preview and storage", async () => {
+    localStorage.setItem(
+      OPTIONS_STORAGE_KEY,
+      JSON.stringify({
+        paper: "a4",
+        margin: "36",
+        title: "",
+        footer: true,
+        cover: true,
+        h1Break: false,
+        theme: "paper",
+        background: "#ffffff",
+        css: "",
+      }),
+    );
+    const root = mount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const preview = root.querySelector<HTMLElement>(".preview-paper");
+    expect(preview?.style.getPropertyValue("--moye-preview-paper-width")).toBe(
+      "794px",
+    );
+
+    const paper = root.querySelector<HTMLSelectElement>("#setting-paper");
+    if (!paper) throw new Error("missing paper control");
+    paper.value = "a4-landscape";
+    paper.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const margin = root.querySelector<HTMLSelectElement>("#setting-margin");
+    if (!margin) throw new Error("missing margin control");
+    margin.value = "0";
+    margin.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const theme = root.querySelector<HTMLSelectElement>("#setting-theme");
+    if (!theme) throw new Error("missing theme control");
+    theme.value = "editorial";
+    theme.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const h1Break = root.querySelector<HTMLInputElement>("#setting-h1-break");
+    if (!h1Break) throw new Error("missing H1 break control");
+    h1Break.checked = true;
+    h1Break.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(preview?.style.getPropertyValue("--moye-preview-paper-width")).toBe(
+      "1123px",
+    );
+    expect(preview?.style.getPropertyValue("--moye-preview-paper-height")).toBe(
+      "794px",
+    );
+    expect(preview?.style.getPropertyValue("--moye-preview-paper-margin")).toBe(
+      "0px",
+    );
+    expect(preview?.style.background).toBe("rgb(253, 251, 247)");
+    expect(preview?.getAttribute("data-h1-break")).toBe("true");
+    expect(root.querySelector("#docTheme")?.textContent).toContain(
+      "--accent: #8a3b22",
+    );
+
+    const stored = JSON.parse(
+      localStorage.getItem(OPTIONS_STORAGE_KEY) ?? "{}",
+    ) as Record<string, unknown>;
+    expect(stored).toMatchObject({
+      paper: "a4-landscape",
+      margin: "0",
+      theme: "editorial",
+      h1Break: true,
+      background: "#fdfbf7",
+    });
   });
 });

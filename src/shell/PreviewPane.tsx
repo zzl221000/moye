@@ -1,17 +1,21 @@
 import { createEffect, createSignal } from "solid-js";
 import { estimatePageCount } from "../doc/page-estimate";
-import { A4_PREVIEW } from "../doc/paper";
+import type { PageMetrics } from "../doc/paper";
 import type { ExportDocument } from "../doc/render";
 
 type PreviewPaneProps = {
   document: ExportDocument;
+  paper: PageMetrics;
+  background: string;
+  pageContentHeightPx: number;
+  h1Break: boolean;
   onPageEstimate: (pages: number) => void;
 };
 
 /**
- * 版式预览: a continuous A4-width sheet. The HTML comes from the same
- * `renderExportDocument` result the export uses; only the on-screen zoom is
- * preview-specific, and it never touches the export clone.
+ * 版式预览: a continuous sheet at the selected paper size. The HTML comes from
+ * the same `renderExportDocument` result the export uses; only the on-screen
+ * zoom is preview-specific, and it never touches the export clone.
  */
 export default function PreviewPane(props: PreviewPaneProps) {
   const [stack, setStack] = createSignal<HTMLDivElement>();
@@ -19,14 +23,14 @@ export default function PreviewPane(props: PreviewPaneProps) {
   const [zoom, setZoom] = createSignal(1);
 
   createEffect(
-    () => stack(),
-    (element) => {
+    () => ({ element: stack(), paperWidth: props.paper.widthPx }),
+    ({ element, paperWidth }) => {
       if (!element) return;
 
       const fit = (): void => {
         const available = element.clientWidth;
         if (available <= 0) return;
-        const next = Math.min(1, Math.max(0.2, available / A4_PREVIEW.widthPx));
+        const next = Math.min(1, Math.max(0.2, available / paperWidth));
         setZoom(next);
       };
 
@@ -43,8 +47,13 @@ export default function PreviewPane(props: PreviewPaneProps) {
   // screen pixels. Dividing by the zoom recovers the layout height that must be
   // compared with one page's printable height in `estimatePageCount`.
   createEffect(
-    () => ({ element: content(), document: props.document, scale: zoom() }),
-    ({ element, scale }) => {
+    () => ({
+      element: content(),
+      document: props.document,
+      scale: zoom(),
+      pageHeight: props.pageContentHeightPx,
+    }),
+    ({ element, scale, pageHeight }) => {
       if (!element) {
         props.onPageEstimate(0);
         return;
@@ -53,7 +62,7 @@ export default function PreviewPane(props: PreviewPaneProps) {
       const measure = (): void => {
         const height = element.getBoundingClientRect().height;
         const layoutHeight = scale > 0 ? height / scale : height;
-        props.onPageEstimate(estimatePageCount(layoutHeight));
+        props.onPageEstimate(estimatePageCount(layoutHeight, pageHeight));
       };
 
       measure();
@@ -75,8 +84,12 @@ export default function PreviewPane(props: PreviewPaneProps) {
       <div class="preview-stack" ref={(element) => setStack(element)}>
         <div
           class="preview-paper"
+          data-h1-break={props.h1Break ? "true" : undefined}
           style={{
-            background: props.document.background,
+            background: props.background,
+            "--moye-preview-paper-width": `${props.paper.widthPx}px`,
+            "--moye-preview-paper-height": `${props.paper.heightPx}px`,
+            "--moye-preview-paper-margin": `${props.paper.marginPx}px`,
             "--moye-preview-zoom": String(zoom()),
           }}
         >

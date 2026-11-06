@@ -1,0 +1,231 @@
+/* ==========================================================================
+   settings.css — settings dialog
+   A top-layer <dialog>, so opening it never changes the shell's layout.
+   ========================================================================== */
+
+.settings-dialog {
+  width: min(420px, calc(100vw - 2 * var(--moye-space-surface-compact)));
+  max-width: none;
+  max-height: min(760px, calc(100dvh - 2 * var(--moye-space-group)));
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--moye-color-border-default);
+  border-radius: var(--moye-radius-dialog);
+  background: var(--moye-color-surface-page);
+  color: var(--moye-color-text-primary);
+  box-shadow: var(--moye-elevation-modal);
+}
+
+.settings-dialog::backdrop {
+  background: var(--moye-color-surface-scrim);
+}
+
+.settings-dialog__panel {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+}
+
+.settings-dialog__head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--moye-space-surface);
+  padding: var(--moye-space-surface) var(--moye-space-group);
+  border-bottom: 1px solid var(--moye-color-border-subtle);
+}
+
+.settings-dialog__title {
+  margin: 0;
+  font-family: var(--moye-type-section-title-font-family);
+  font-size: var(--moye-type-heading-font-size);
+  font-weight: var(--moye-type-heading-font-weight);
+  line-height: var(--moye-type-heading-line-height);
+  letter-spacing: var(--moye-type-heading-letter-spacing);
+}
+
+.settings-dialog__close {
+  flex: none;
+}
+
+.settings-dialog__body {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--moye-space-inline) var(--moye-space-group)
+    var(--moye-space-group);
+}
+
+.settings-group {
+  display: grid;
+  gap: var(--moye-space-surface-compact);
+  padding: var(--moye-space-surface) 0;
+  border-bottom: 1px solid var(--moye-color-border-subtle);
+}
+
+.settings-group:last-child {
+  padding-bottom: var(--moye-space-inline);
+  border-bottom: 0;
+}
+
+.settings-group__title {
+  margin: 0;
+  color: var(--moye-color-text-tertiary);
+  font-family: var(--moye-type-helper-font-family);
+  font-size: var(--moye-type-helper-font-size);
+  font-weight: 600;
+  line-height: var(--moye-type-helper-line-height);
+  letter-spacing: 0.08em;
+}
+
+/* --- fields -------------------------------------------------------------- */
+
+.settings-field {
+  display: grid;
+  gap: var(--moye-space-inline);
+}
+
+.settings-field__label {
+  color: var(--moye-color-text-secondary);
+  font-size: var(--moye-type-compact-font-size);
+  font-weight: 500;
+  line-height: var(--moye-type-compact-line-height);
+}
+
+.settings-control {
+  width: 100%;
+  min-width: 0;
+  height: var(--moye-control-regular);
+  padding: 0 10px;
+  border: 1px solid var(--moye-color-border-default);
+  border-radius: var(--moye-radius-control);
+  background: var(--moye-color-surface-page);
+  color: var(--moye-color-text-primary);
+  font-family: var(--moye-font-ui);
+  font-size: var(--moye-type-compact-font-size);
+  line-height: var(--moye-type-compact-line-height);
+}
+
+.settings-control:hover {
+  border-color: var(--moye-color-border-strong);
+}
+
+.settings-control:focus-visible {
+  outline-offset: 1px;
+}
+
+.settings-color {
+  width: 100%;
+  height: var(--moye-control-regular);
+  padding: 3px;
+  border: 1px solid var(--moye-color-border-default);
+  border-radius: var(--moye-radius-control);
+  background: var(--moye-color-surface-page);
+  cursor: pointer;
+}
+
+.settings-color:focus-visible {
+  outline-offset: 1px;
+}
+
+/* --- switches ------------------------------------------------------------ */
+
+.settings-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--moye-space-surface);
+  min-height: var(--moye-control-compact);
+  cursor: pointer;
+}
+
+.settings-switch__label {
+  color: var(--moye-color-text-secondary);
+  font-size: var(--moye-type-compact-font-size);
+  font-weight: 500;
+  line-height: var(--moye-type-compact-line-height);
+}
+
+.settings-switch__control {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+}
+
+.settings-switch__control input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.settings-switch__track {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--moye-radius-pill);
+  background: var(--moye-color-border-strong);
+  pointer-events: none;
+  transition: background-color var(--moye-motion-duration-feedback)
+    var(--moye-motion-easing-standard);
+}
+
+.settings-switch__track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--moye-color-surface-page);
+  box-shadow: var(--moye-elevation-raised);
+  transition: transform var(--moye-motion-duration-control)
+    var(--moye-motion-easing-standard);
+}
+
+.settings-switch__control input:checked + .settings-switch__track {
+  background: var(--moye-color-action-primary);
+}
+
+.settings-switch__control input:checked + .settings-switch__track::after {
+  transform: translateX(14px);
+}
+
+.settings-switch__control input:focus-visible + .settings-switch__track {
+  outline: var(--moye-focus-ring-width) solid var(--moye-color-border-focus);
+  outline-offset: var(--moye-focus-ring-offset);
+}
+
+/* --- advanced ------------------------------------------------------------ */
+
+.settings-advanced {
+  border-top: 1px solid var(--moye-color-border-subtle);
+  padding-top: var(--moye-space-inline);
+}
+
+.settings-advanced__summary {
+  color: var(--moye-color-text-secondary);
+  font-size: var(--moye-type-compact-font-size);
+  font-weight: 500;
+  line-height: var(--moye-type-compact-line-height);
+  cursor: pointer;
+}
+
+.settings-advanced__body {
+  padding-top: var(--moye-space-surface-compact);
+}
+
+.settings-code {
+  height: auto;
+  min-height: 144px;
+  padding: 10px;
+  font-family: var(--moye-font-code);
+  font-size: var(--moye-type-code-font-size);
+  line-height: var(--moye-type-code-line-height);
+  resize: vertical;
+}

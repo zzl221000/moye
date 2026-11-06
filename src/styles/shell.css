@@ -456,9 +456,9 @@ body.is-resizing {
   min-width: 0;
 }
 
-/* A continuous A4-width sheet. The export uses the same 698px content
-   column; the preview scales the whole sheet with `zoom`, which keeps every
-   line break identical to the PDF while fitting the pane. */
+/* A continuous sheet at the selected paper size. The export uses the same
+   content column; the preview scales the whole sheet with `zoom`, which keeps
+   every line break identical to the PDF while fitting the pane. */
 .preview-paper {
   position: relative;
   flex: none;
@@ -473,6 +473,29 @@ body.is-resizing {
 
 .preview-paper__content {
   min-width: 0;
+}
+
+/* A forced page break is the one pagination rule that is already known before
+   dompdf runs, so the continuous preview can mark it without pretending to
+   know the real page boundaries. The marker is drawn outside the flow. */
+.preview-paper[data-h1-break="true"]
+  .preview-paper__content
+  .pdf-doc
+  > h1:not(:first-of-type) {
+  position: relative;
+}
+
+.preview-paper[data-h1-break="true"]
+  .preview-paper__content
+  .pdf-doc
+  > h1:not(:first-of-type)::before {
+  content: "";
+  position: absolute;
+  top: -16px;
+  right: 0;
+  left: 0;
+  border-top: 1px dashed var(--moye-color-border-strong);
+  pointer-events: none;
 }
 
 .preview-paper::after {

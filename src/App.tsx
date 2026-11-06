@@ -1,5 +1,14 @@
-import { createEffect, createMemo, createSignal } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { exportDocumentToPdf } from "./doc/export";
+import {
+  browserOptionsStorage,
+  exportSettingsFor,
+  readOptions,
+  renderOptionsFor,
+  writeOptions,
+  type DocumentOptions,
+} from "./doc/options";
+import { pageContentHeight, paperMetrics } from "./doc/paper";
 import { renderExportDocument } from "./doc/render";
 import {
   browserSplitStorage,
@@ -15,6 +24,7 @@ import { browserDraftStorage, readDraft } from "./writing/draft";
 import { FALLBACK_FILE_NAME } from "./writing/filename";
 import type { WritingSession, WritingState } from "./writing/session";
 import PreviewPane from "./shell/PreviewPane";
+import SettingsPanel, { type ThemeChoice } from "./shell/SettingsPanel";
 import StatusBar from "./shell/StatusBar";
 import TopBar from "./shell/TopBar";
 import WritingPane from "./shell/WritingPane";
@@ -40,6 +50,15 @@ function initialWritingState(): WritingState {
   };
 }
 
+/** Document themes ship in the frozen `themes.js` table. */
+function readThemeChoices(): ThemeChoice[] {
+  const themes = globalThis.MOYE_THEMES ?? {};
+  return Object.entries(themes).map(([id, theme]) => ({
+    id,
+    label: theme.label ?? id,
+  }));
+}
+
 type SplitDrag = {
   readonly pointerId: number;
   readonly startX: number;
@@ -51,23 +70,51 @@ type SplitDrag = {
 export default function App() {
   const initial = initialWritingState();
   const splitStorage = browserSplitStorage();
+  const optionsStorage = browserOptionsStorage();
+  const themeChoices = readThemeChoices();
+  const initialOptions = readOptions(
+    optionsStorage,
+    themeChoices.map((theme) => theme.id),
+  );
 
   const [docState, setDocState] = createSignal<WritingState>(initial);
   const [previewMarkdown, setPreviewMarkdown] = createSignal(initial.markdown);
+  const [options, setOptions] = createSignal<DocumentOptions>(initialOptions);
+  // Solid 2 stages signal writes inside one interaction, so a handler that
+  // composes a patch from `options()` can read the previous object. Settings
+  // changes are merged here, in order, against the last committed value.
+  let currentOptions = initialOptions;
+  const renderOptions = createMemo(() => renderOptionsFor(options()));
   const previewDocument = createMemo(() =>
-    renderExportDocument(previewMarkdown()),
+    renderExportDocument(previewMarkdown(), renderOptions()),
+  );
+  const previewPaper = createMemo(() =>
+    paperMetrics(options().paper, Number(options().margin)),
+  );
+  const previewBackground = () =>
+    options().background || previewDocument().background;
+  const hasPageBands = createMemo(
+    () =>
+      Boolean(options().headerTitle.trim() || previewDocument().title) ||
+      options().pageNumbers,
+  );
+  const previewPageHeight = createMemo(() =>
+    pageContentHeight(previewPaper(), hasPageBands()),
   );
   const [pages, setPages] = createSignal(0);
   const [split, setSplit] = createSignal(readSplit(splitStorage));
   const [resizing, setResizing] = createSignal(false);
+  const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [exporting, setExporting] = createSignal(false);
   const [exportError, setExportError] = createSignal<string | null>(null);
 
   let session: WritingSession | null = null;
+  let settingsButton: HTMLButtonElement | null = null;
   let drag: SplitDrag | null = null;
 
   // The preview follows the document, but not on every keystroke: rendering
-  // and sanitizing a long document synchronously would stall typing.
+  // and sanitizing a long document synchronously would stall typing. Theme and
+  // detail CSS are applied immediately because they change no source text.
   createEffect(
     () => ({
       markdown: docState().markdown,
@@ -119,20 +166,60 @@ export default function App() {
     commitSplit(next);
   }
 
+  function updateOptions(patch: Partial<DocumentOptions>): void {
+    const current = currentOptions;
+    let next: DocumentOptions = { ...current, ...patch };
+    if (patch.theme !== undefined && patch.theme !== current.theme) {
+      const theme = (globalThis.MOYE_THEMES ?? {})[patch.theme];
+      if (theme) next = { ...next, background: theme.background };
+    }
+    currentOptions = next;
+    setOptions(next);
+    writeOptions(optionsStorage, next);
+  }
+
+  function closeSettings(): void {
+    setSettingsOpen(false);
+  }
+
+  function focusSettingsButton(): void {
+    settingsButton?.focus();
+  }
+
   async function handleExport(): Promise<void> {
     if (exporting() || !docState().hasDocument) return;
     setExporting(true);
     setExportError(null);
     try {
       // Export the newest Markdown, not the possibly debounced preview, so a
-      // quick Ctrl+Shift+E can never ship the previous keystroke.
-      await exportDocumentToPdf(renderExportDocument(docState().markdown));
+      // quick Ctrl+Shift+E can never ship the previous keystroke. Theme, paper
+      // and layout come from the same settings object the preview uses.
+      const document = renderExportDocument(
+        docState().markdown,
+        renderOptions(),
+      );
+      await exportDocumentToPdf(
+        document,
+        exportSettingsFor(options(), document),
+      );
     } catch (error) {
       console.error(error);
       setExportError(error instanceof Error ? error.message : "导出失败");
     } finally {
       setExporting(false);
     }
+  }
+
+  if (import.meta.env.DEV) {
+    const hook: MoyeSettingsHook = {
+      getOptions: () => ({ ...options() }),
+      getExportSettings: () =>
+        exportSettingsFor(options(), previewDocument()),
+    };
+    window.__moyeSettings = hook;
+    onCleanup(() => {
+      if (window.__moyeSettings === hook) delete window.__moyeSettings;
+    });
   }
 
   return (
@@ -150,6 +237,11 @@ export default function App() {
             void session?.save();
           }}
           onExport={() => void handleExport()}
+          onSettings={() => setSettingsOpen(true)}
+          onSettingsButton={(button) => {
+            settingsButton = button;
+          }}
+          settingsOpen={settingsOpen()}
           exporting={exporting()}
           exportError={exportError()}
         />
@@ -224,6 +316,10 @@ export default function App() {
 
           <PreviewPane
             document={previewDocument()}
+            paper={previewPaper()}
+            background={previewBackground()}
+            pageContentHeightPx={previewPageHeight()}
+            h1Break={options().pageBreakOnH1}
             onPageEstimate={(count) => setPages(count)}
           />
         </main>
@@ -233,6 +329,15 @@ export default function App() {
           characters={countCharacters(docState().markdown)}
           pages={pages()}
           saveState={docState().saveState}
+        />
+
+        <SettingsPanel
+          open={settingsOpen()}
+          options={options()}
+          themes={themeChoices}
+          onChange={updateOptions}
+          onClose={closeSettings}
+          returnFocus={focusSettingsButton}
         />
       </div>
     </>
