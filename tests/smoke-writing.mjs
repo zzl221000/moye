@@ -178,6 +178,32 @@ async function pressShortcut(cdp, sessionId, key, code, virtualKeyCode, modifier
   await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...base }, sessionId);
 }
 
+async function pressEnter(cdp, sessionId) {
+  const base = {
+    key: "Enter",
+    code: "Enter",
+    windowsVirtualKeyCode: 13,
+    nativeVirtualKeyCode: 13,
+  };
+  await cdp.send(
+    "Input.dispatchKeyEvent",
+    { type: "keyDown", text: "\r", unmodifiedText: "\r", ...base },
+    sessionId,
+  );
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...base }, sessionId);
+}
+
+async function pressEscape(cdp, sessionId) {
+  const base = {
+    key: "Escape",
+    code: "Escape",
+    windowsVirtualKeyCode: 27,
+    nativeVirtualKeyCode: 27,
+  };
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...base }, sessionId);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...base }, sessionId);
+}
+
 async function main() {
   const chromePath = findChrome();
   if (!chromePath) {
@@ -557,12 +583,228 @@ async function main() {
       throw new Error(`草稿恢复后的界面不对：${JSON.stringify(restoredShell)}`);
     }
 
+    // Insert actions: four icon buttons, each writing standard Markdown through
+    // the editor. The link action also proves Enter submits and focus returns.
+    const controls = await evaluate(
+      cdp,
+      sessionId,
+      `[...document.querySelectorAll(".writing-bar button")].map((button) => ({
+        label: button.getAttribute("aria-label"),
+        title: button.getAttribute("title"),
+        text: button.textContent.trim(),
+      }))`,
+    );
+    if (
+      controls.length !== 4 ||
+      controls.some(
+        (control) =>
+          !control.label || control.title !== control.label || control.text !== "",
+      )
+    ) {
+      throw new Error(`插入按钮的可访问名称不对：${JSON.stringify(controls)}`);
+    }
+
+    const resetWritingSurface = async () => {
+      await evaluate(cdp, sessionId, `window.__moye.replace("")`);
+      await evaluate(cdp, sessionId, "window.__moye.focus()");
+    };
+    const clickInsert = async (label) => {
+      await evaluate(
+        cdp,
+        sessionId,
+        `document.querySelector('button[aria-label="${label}"]')?.click()`,
+      );
+    };
+
+    await resetWritingSurface();
+    await clickInsert("插入链接");
+    await waitFor(
+      async () => evaluate(cdp, sessionId, `Boolean(document.querySelector('dialog[open]'))`),
+      5_000,
+      "链接对话框",
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector("dialog[open] input")?.focus()`,
+    );
+    await cdp.send(
+      "Input.insertText",
+      { text: "https://example.com" },
+      sessionId,
+    );
+    await pressEnter(cdp, sessionId);
+    const linkMarkdown = await waitFor(
+      async () => {
+        const value = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return typeof value === "string" &&
+          value.includes("[https://example.com](<https://example.com>)")
+          ? value
+          : null;
+      },
+      10_000,
+      "插入链接",
+    );
+    if (await evaluate(cdp, sessionId, `Boolean(document.querySelector('dialog[open]'))`)) {
+      throw new Error("Enter 确认后链接对话框没有关闭");
+    }
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `Boolean(document.activeElement?.closest(".cm-editor"))`,
+        ),
+      5_000,
+      "链接插入后焦点回到写作面",
+    );
+
+    // Escape cancels without writing anything and also returns focus.
+    await resetWritingSurface();
+    await clickInsert("插入链接");
+    await waitFor(
+      async () => evaluate(cdp, sessionId, `Boolean(document.querySelector('dialog[open]'))`),
+      5_000,
+      "链接对话框（取消）",
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector("dialog[open] input")?.focus()`,
+    );
+    await cdp.send("Input.insertText", { text: "https://cancelled.example" }, sessionId);
+    await pressEscape(cdp, sessionId);
+    await waitFor(
+      async () => evaluate(cdp, sessionId, `!document.querySelector("dialog[open]")`),
+      5_000,
+      "Escape 关闭链接对话框",
+    );
+    if ((await evaluate(cdp, sessionId, "window.__moye.getMarkdown()")) !== "") {
+      throw new Error("Escape 取消后写作面被改写");
+    }
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `Boolean(document.activeElement?.closest(".cm-editor"))`,
+        ),
+      5_000,
+      "取消链接后焦点回到写作面",
+    );
+
+    await resetWritingSurface();
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        window.showOpenFilePicker = async () => [{
+          name: "像素.png",
+          getFile: async () => new File(
+            [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])],
+            "像素.png",
+            { type: "image/png" },
+          ),
+        }];
+      })()`,
+    );
+    await clickInsert("插入图片");
+    const imageMarkdown = await waitFor(
+      async () => {
+        const value = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return typeof value === "string" &&
+          value.includes("![像素](<data:image/png;base64,")
+          ? value
+          : null;
+      },
+      10_000,
+      "插入图片",
+    );
+
+    await resetWritingSurface();
+    await clickInsert("插入表格");
+    const tableMarkdown = await waitFor(
+      async () => {
+        const value = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return typeof value === "string" &&
+          value.includes("| 列 1 | 列 2 |") &&
+          value.includes("| --- | --- |") &&
+          (value.match(/^\|  \|  \|$/gmu) ?? []).length === 2
+          ? value
+          : null;
+      },
+      10_000,
+      "插入表格",
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelectorAll(".msfe-table-cell").length >= 6`,
+        ),
+      5_000,
+      "表格 live 投影",
+    );
+
+    await resetWritingSurface();
+    await clickInsert("插入代码块");
+    const codeMarkdown = await waitFor(
+      async () => {
+        const value = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return value === "```\n\n```" ? value : null;
+      },
+      10_000,
+      "插入代码块",
+    );
+    await cdp.send(
+      "Input.insertText",
+      { text: "const answer = 42;" },
+      sessionId,
+    );
+    await waitFor(
+      async () =>
+        (await evaluate(cdp, sessionId, "window.__moye.getMarkdown()")) ===
+        "```\nconst answer = 42;\n```",
+      10_000,
+      "空代码块光标位于围栏内",
+    );
+
+    // Table and code block replace or wrap a non-empty selection.
+    await evaluate(cdp, sessionId, `window.__moye.replace("旧内容")`);
+    await evaluate(cdp, sessionId, "window.__moye.focus()");
+    await pressShortcut(cdp, sessionId, "a", "KeyA", 65, 2);
+    await clickInsert("插入表格");
+    await waitFor(
+      async () =>
+        (await evaluate(cdp, sessionId, "window.__moye.getMarkdown()")) ===
+        "| 列 1 | 列 2 |\n| --- | --- |\n|  |  |\n|  |  |",
+      10_000,
+      "表格替换选区",
+    );
+
+    await evaluate(cdp, sessionId, `window.__moye.replace("代码")`);
+    await evaluate(cdp, sessionId, "window.__moye.focus()");
+    await pressShortcut(cdp, sessionId, "a", "KeyA", 65, 2);
+    await clickInsert("插入代码块");
+    await waitFor(
+      async () =>
+        (await evaluate(cdp, sessionId, "window.__moye.getMarkdown()")) ===
+        "```\n代码\n```",
+      10_000,
+      "代码块包裹选区",
+    );
+
     console.log("✔ MSFE live 写作面冒烟通过");
     console.log(`  文档往返：${JSON.stringify(roundTrip.slice(0, 24))}…`);
     console.log(`  键入往返：${JSON.stringify(typed)}`);
     console.log(`  刷新恢复：${JSON.stringify(restored)}（${restoredShell.name}）`);
     console.log("  中文标题、表格、任务列表、代码块与长链接换行均已投影");
     console.log("  Ctrl+S 写回、Ctrl+Shift+S 另存、Ctrl+O 打开、拖入 Markdown 均通过");
+    console.log(`  插入链接：${JSON.stringify(linkMarkdown)}`);
+    console.log(`  插入图片：${JSON.stringify(imageMarkdown.slice(0, 48))}…`);
+    console.log(`  插入表格：${JSON.stringify(tableMarkdown)}`);
+    console.log(`  插入代码块：${JSON.stringify(codeMarkdown)}`);
   } finally {
     if (cdp && targetId) {
       try {

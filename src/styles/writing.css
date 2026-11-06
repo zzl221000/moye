@@ -48,6 +48,67 @@
   background: var(--moye-color-surface-hover);
 }
 
+/* --- link dialog --------------------------------------------------------- */
+
+.insert-dialog {
+  width: min(360px, calc(100vw - 2 * var(--moye-space-section)));
+  padding: var(--moye-space-group);
+  border: 1px solid var(--moye-color-border-default);
+  border-radius: var(--moye-radius-dialog);
+  background: var(--moye-color-surface-page);
+  color: var(--moye-color-text-primary);
+  box-shadow: var(--moye-elevation-modal);
+}
+
+.insert-dialog::backdrop {
+  background: var(--moye-color-surface-scrim);
+}
+
+.insert-dialog__form {
+  display: grid;
+  gap: var(--moye-space-inline);
+}
+
+.insert-dialog__label {
+  color: var(--moye-color-text-secondary);
+  font-size: var(--moye-type-compact-font-size);
+  font-weight: 500;
+  line-height: var(--moye-type-compact-line-height);
+}
+
+.insert-dialog__input {
+  min-width: 0;
+  height: var(--moye-control-comfortable);
+  padding: 0 var(--moye-space-surface-compact);
+  border: 1px solid var(--moye-color-border-default);
+  border-radius: var(--moye-radius-control);
+  background: var(--moye-color-surface-page);
+  color: var(--moye-color-text-primary);
+  font-size: var(--moye-type-compact-font-size);
+}
+
+.insert-dialog__input:focus-visible {
+  outline-offset: 1px;
+}
+
+.insert-dialog__input[aria-invalid="true"] {
+  border-color: var(--moye-color-danger);
+}
+
+.insert-dialog__error {
+  margin: 0;
+  color: var(--moye-color-danger);
+  font-size: var(--moye-type-helper-font-size);
+  line-height: var(--moye-type-helper-line-height);
+}
+
+.insert-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--moye-space-inline);
+  margin-top: var(--moye-space-inline);
+}
+
 /* --- CodeMirror chrome ---------------------------------------------------- */
 
 .writing-host .cm-editor {

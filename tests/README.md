@@ -16,7 +16,7 @@ bun run smoke:writing
 MOYE_SMOKE_SCREENSHOT=writing.png MOYE_SMOKE_SCREENSHOT_EMPTY=empty.png bun run smoke:writing
 ```
 
-脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影；然后用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，键入 `中文 ABC 123`，等待草稿写入后刷新页面并断言 `getMarkdown()` 与文件名都恢复。
+脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影；然后用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，键入 `中文 ABC 123`，等待草稿写入后刷新页面并断言 `getMarkdown()` 与文件名都恢复。最后逐个点击链接、图片、表格、代码块四个插入按钮，断言写回的标准 Markdown、链接对话框的 Enter/Escape 与焦点回归，以及表格替换选区、代码块包裹选区。
 
 前置条件：
 
