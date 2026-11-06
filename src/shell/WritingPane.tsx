@@ -31,7 +31,12 @@ export default function WritingPane(props: WritingPaneProps) {
   });
 
   return (
-    <section class="writing-pane" data-region="writing" aria-label="写作面">
+    <section
+      id="writing-pane"
+      class="writing-pane"
+      data-region="writing"
+      aria-label="写作面"
+    >
       <div class="writing-surface">
         <div class="writing-page">
           <div class="writing-host" ref={host} hidden={!props.hasDocument} />

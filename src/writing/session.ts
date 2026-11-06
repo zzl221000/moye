@@ -220,6 +220,9 @@ export class WritingSession {
 
   private handleSourceChange(): void {
     if (this.destroyed) return;
+    // The shell needs the current source for the live preview and the status
+    // bar, not the last value written by the draft debounce.
+    this.markdown = this.editor ? this.editor.getMarkdown() : this.markdown;
     this.saveState = "dirty";
     this.emit();
     this.scheduleDraft();

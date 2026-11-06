@@ -16,14 +16,14 @@ bun run smoke:writing
 MOYE_SMOKE_SCREENSHOT=writing.png MOYE_SMOKE_SCREENSHOT_EMPTY=empty.png bun run smoke:writing
 ```
 
-脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影；然后用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，键入 `中文 ABC 123`，等待草稿写入后刷新页面并断言 `getMarkdown()` 与文件名都恢复。
+脚本会启动 Vite 开发服务器，挂载 MSFE live 写作面，载入示例，替换为包含中文标题、表格、任务列表、代码块与长链接的 fixture，检查 live 投影与右侧版式预览，然后拖动分隔条并断言比例写入 `localStorage`；接着用页面内的假文件句柄驱动 `Ctrl+S` 写回、`Ctrl+Shift+S` 另存与 `Ctrl+O` 打开，拖入一个 Markdown 文件，键入 `中文 ABC 123`，等待草稿写入后刷新页面并断言 `getMarkdown()`、文件名与分栏比例都恢复；最后键入一份长文档，断言预览出现新标题、状态栏字数增长且页数估算随内容高度增加。窗口改为 800px 宽时还会断言写作面在上、预览在下、分隔条隐藏。
 
 前置条件：
 
 - Node.js 22+（脚本使用内置 `WebSocket` 驱动 DevTools）。
 - 本机安装 Chrome 或 Edge；找不到时用 `CHROME_PATH` 指向可执行文件。
 
-它不在 `bun run test` 里运行，因为浏览器不是单元测试环境的依赖。`bun run test` 只覆盖纯函数：文件名归一化、草稿读写、文件句柄能力降级。
+它不在 `bun run test` 里运行，因为浏览器不是单元测试环境的依赖。`bun run test` 只覆盖纯函数：文件名归一化、草稿读写、文件句柄能力降级、分栏比例的夹取与持久化、字数/词数统计、页数估算。
 
 ## 应用端到端导出
 
@@ -43,9 +43,12 @@ node tests/e2e.mjs --ci     # CI 模式：页数 + 关键文本
 
 1. 用 Node 内置 HTTP 服务把 `dist/` 挂在 Pages base `/moye/` 下；
 2. 启动无头 Chrome（默认 `C:\Program Files\Google\Chrome\Application\chrome.exe`，可用 `CHROME_PATH` 覆盖）；
-3. 打开构建产物，等待字体与图片就绪，点击 `[data-action="export"]`；
-4. 通过 `Browser.setDownloadBehavior` 接收浏览器下载的 PDF；
-5. 用与 `tests/compare.mjs` 相同的页数优先级和 `pdftotext -enc UTF-8` 规则，与 `tests/golden/mixed.json` 比对。
+3. 打开构建产物，把 `mixed.md` 写入 `localStorage` 草稿并刷新，等待版式预览渲染出这份文档、字体与图片就绪；
+4. 点击 `[data-action="export"]`；
+5. 通过 `Browser.setDownloadBehavior` 接收浏览器下载的 PDF；
+6. 用与 `tests/compare.mjs` 相同的页数优先级和 `pdftotext -enc UTF-8` 规则，与 `tests/golden/mixed.json` 比对。
+
+第 3 步是必要的：版式预览现在跟随当前文档，构建产物不再内置固定 fixture，草稿是应用里能触发同一渲染路径的公开入口。
 
 退出码：`0` 通过；`1` PDF 或文本不匹配；`2` 缺少构建、Chrome、`pdftotext` 或参数错误。
 

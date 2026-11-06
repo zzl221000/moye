@@ -103,7 +103,19 @@ function requireEnvironment() {
     throw new EnvironmentError("tests/golden/mixed.json 格式无效。");
   }
 
-  return { pdftotext, pdfinfo: findExecutable("pdfinfo"), chrome, golden };
+  const mixedPath = path.join(__dirname, "fixtures", "mixed.md");
+  const mixedMarkdown = fs.readFileSync(mixedPath, "utf8");
+  if (mixedMarkdown.trim() === "") {
+    throw new EnvironmentError(`fixture 为空：${path.relative(repoRoot, mixedPath)}`);
+  }
+
+  return {
+    pdftotext,
+    pdfinfo: findExecutable("pdfinfo"),
+    chrome,
+    golden,
+    mixedMarkdown,
+  };
 }
 
 function findExecutable(name) {
@@ -233,7 +245,7 @@ async function waitFor(condition, timeout, label, detail) {
     if (value) return value;
     await sleep(150);
   }
-  const suffix = detail ? `\n${detail()}` : "";
+  const suffix = detail ? `\n${await detail()}` : "";
   throw new Error(`等待超时：${label}${suffix}`);
 }
 
@@ -453,7 +465,8 @@ function reportPageDifference(expected, actual, page) {
 /* ------------------------------------------------------------------- main */
 
 async function main() {
-  const { pdftotext, pdfinfo, chrome, golden } = requireEnvironment();
+  const { pdftotext, pdfinfo, chrome, golden, mixedMarkdown } =
+    requireEnvironment();
   const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), "moye-e2e-"));
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "moye-e2e-chrome-"));
   const pageErrors = [];
@@ -502,25 +515,87 @@ async function main() {
         const ready = await evaluate(
           cdp,
           sessionId,
-          `(() => {
-            const button = document.querySelector('[data-action="export"]');
-            const doc = document.querySelector('.preview-paper .pdf-doc');
-            const images = Array.from(document.images);
-            return Boolean(
-              document.readyState === "complete" &&
-              button &&
-              doc &&
-              doc.textContent &&
-              document.fonts.status === "loaded" &&
-              images.every((image) => image.complete && image.naturalWidth > 0)
-            );
-          })()`,
+          `Boolean(document.readyState === "complete" && document.querySelector(".app-shell"))`,
         );
         return ready;
       },
       30_000,
       "应用加载",
       () => (pageErrors.length ? `页面错误：\n${pageErrors.join("\n")}` : ""),
+    );
+
+    // The preview follows the current document, so the export check first has
+    // to open the mixed fixture. A draft is the public restore path; it needs
+    // no development-only hook in the built app.
+    const draft = JSON.stringify({
+      name: "混合结构基线.md",
+      content: mixedMarkdown,
+      at: Date.now(),
+    });
+    await evaluate(
+      cdp,
+      sessionId,
+      `localStorage.setItem("moye.draft.v1", ${JSON.stringify(draft)})`,
+    );
+    await cdp.send("Page.enable", {}, sessionId);
+    await cdp.send("Page.reload", { ignoreCache: true }, sessionId);
+
+    await waitFor(
+      async () => {
+        try {
+          const ready = await evaluate(
+            cdp,
+            sessionId,
+            `(() => {
+              const button = document.querySelector('[data-action="export"]');
+              const doc = document.querySelector('.preview-paper .pdf-doc');
+              const images = Array.from(document.querySelectorAll("img[src]"));
+              return Boolean(
+                document.readyState === "complete" &&
+                button &&
+                !button.disabled &&
+                doc &&
+                doc.textContent?.includes("混合结构基线") &&
+                document.fonts.status === "loaded" &&
+                images.every((image) => image.complete && image.naturalWidth > 0)
+              );
+            })()`,
+          );
+          return ready;
+        } catch {
+          return null;
+        }
+      },
+      30_000,
+      "混合 fixture 载入预览",
+      async () => {
+        if (pageErrors.length) return `页面错误：\n${pageErrors.join("\n")}`;
+        try {
+          const state = await evaluate(
+            cdp,
+            sessionId,
+            `(() => {
+              const button = document.querySelector('[data-action="export"]');
+              const doc = document.querySelector(".preview-paper .pdf-doc");
+              const images = Array.from(document.querySelectorAll("img[src]"));
+              return {
+                ready: document.readyState,
+                button: Boolean(button),
+                disabled: button?.disabled,
+                docText: (doc?.textContent ?? "").slice(0, 80),
+                fonts: document.fonts.status,
+                badImages: images
+                  .filter((image) => !image.complete || image.naturalWidth === 0)
+                  .slice(0, 3)
+                  .map((image) => image.getAttribute("src")),
+              };
+            })()`,
+          );
+          return JSON.stringify(state);
+        } catch (error) {
+          return `无法读取页面状态：${String(error)}`;
+        }
+      },
     );
 
     await evaluate(

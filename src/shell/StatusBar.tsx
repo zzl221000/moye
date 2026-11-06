@@ -4,7 +4,9 @@ export type { SaveState };
 
 type StatusBarProps = {
   fileName: string;
-  words: number;
+  /** Non-whitespace characters in the current Markdown source. */
+  characters: number;
+  /** Estimate from the preview's laid-out height; pagination belongs to dompdf. */
   pages: number;
   saveState: SaveState;
 };
@@ -30,7 +32,7 @@ export default function StatusBar(props: StatusBarProps) {
 
       <span class="statusbar__spacer" aria-hidden="true" />
 
-      <span class="statusbar__meta">{props.words} 字</span>
+      <span class="statusbar__meta">{props.characters} 字</span>
       <span class="statusbar__meta">{props.pages} 页</span>
     </footer>
   );

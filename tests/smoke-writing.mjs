@@ -296,6 +296,110 @@ async function main() {
       throw new Error("fixture 的 Markdown 往返不一致");
     }
 
+    // The preview follows the editor's current Markdown through the shared
+    // render seam; it is no longer a fixed fixture.
+    const preview = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const doc = document.querySelector(".preview-paper .pdf-doc");
+            const status = document.querySelector(".statusbar")?.textContent ?? "";
+            const pages = Number((status.match(/(\\d+)\\s*页/) ?? [])[1] ?? 0);
+            return {
+              heading: doc?.querySelector("h1")?.textContent ?? "",
+              text: doc?.textContent ?? "",
+              pages,
+            };
+          })()`,
+        );
+        return state.heading === "中文标题" &&
+          state.text.includes("段落包含") &&
+          state.pages >= 1
+          ? state
+          : null;
+      },
+      10_000,
+      "预览跟随当前文档并给出页数",
+    );
+
+    // Drag the separator: the fraction changes, persists, and survives reload
+    // later in this script.
+    const splitter = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const handle = document.querySelector('[role="separator"]');
+        const workspace = document.querySelector(".workspace");
+        if (!handle || !workspace) return null;
+        const h = handle.getBoundingClientRect();
+        const w = workspace.getBoundingClientRect();
+        return {
+          x: h.left + h.width / 2,
+          y: h.top + h.height / 2,
+          width: w.width,
+          before: handle.getAttribute("aria-valuenow"),
+        };
+      })()`,
+    );
+    if (!splitter || splitter.before !== "50") {
+      throw new Error(`分隔条初始状态不对：${JSON.stringify(splitter)}`);
+    }
+    const dragBy = 160;
+    await cdp.send(
+      "Input.dispatchMouseEvent",
+      {
+        type: "mousePressed",
+        x: splitter.x,
+        y: splitter.y,
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+      },
+      sessionId,
+    );
+    for (let step = 1; step <= 5; step += 1) {
+      await cdp.send(
+        "Input.dispatchMouseEvent",
+        {
+          type: "mouseMoved",
+          x: splitter.x + (dragBy * step) / 5,
+          y: splitter.y,
+          button: "left",
+          buttons: 1,
+        },
+        sessionId,
+      );
+    }
+    await cdp.send(
+      "Input.dispatchMouseEvent",
+      {
+        type: "mouseReleased",
+        x: splitter.x + dragBy,
+        y: splitter.y,
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+      },
+      sessionId,
+    );
+    const draggedSplit = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => ({
+            now: Number(document.querySelector('[role="separator"]')?.getAttribute("aria-valuenow")),
+            stored: localStorage.getItem("moye.split.v1"),
+          }))()`,
+        );
+        return state.now > 55 && state.now <= 70 ? state : null;
+      },
+      5_000,
+      "拖动分隔条",
+    );
+
     await waitFor(
       async () =>
         evaluate(
@@ -527,7 +631,31 @@ async function main() {
     );
 
     await cdp.send("Page.enable", {}, sessionId);
+    // A fresh document is the only place the marker disappears; evaluating in
+    // the old context after Page.reload would otherwise pass immediately.
+    const reloadMark = `moye-reload-${Date.now()}`;
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moyeReloadMark = ${JSON.stringify(reloadMark)}`,
+    );
     await cdp.send("Page.reload", { ignoreCache: true }, sessionId);
+    await waitFor(
+      async () => {
+        try {
+          const stillOld = await evaluate(
+            cdp,
+            sessionId,
+            `window.__moyeReloadMark === ${JSON.stringify(reloadMark)}`,
+          );
+          return stillOld ? null : true;
+        } catch {
+          return null;
+        }
+      },
+      20_000,
+      "页面重载",
+    );
     const restored = await waitFor(
       async () => {
         try {
@@ -551,16 +679,118 @@ async function main() {
         empty: Boolean(document.querySelector(".writing-empty")),
         live: Boolean(document.querySelector('.cm-editor[data-msfe-mode="live"]')),
         name: document.querySelector(".doc-name")?.value,
+        split: document.querySelector('[role="separator"]')?.getAttribute("aria-valuenow"),
       })`,
     );
     if (restoredShell.empty || !restoredShell.live || restoredShell.name !== "拖入.md") {
       throw new Error(`草稿恢复后的界面不对：${JSON.stringify(restoredShell)}`);
     }
+    if (Number(restoredShell.split) !== draggedSplit.now) {
+      throw new Error(
+        `刷新后分栏比例没有恢复：期望 ${draggedSplit.now}，实际 ${restoredShell.split}`,
+      );
+    }
+
+    // Typing must change the preview and the page estimate, not just the
+    // editor's internal state. The long text is generated here so the expected
+    // height is stable across runs.
+    const longTyped = [
+      "# 分页估算",
+      "",
+      "分页标记：预览与状态栏随键入更新。",
+      "",
+      ...Array.from(
+        { length: 50 },
+        (_, index) =>
+          `第 ${index + 1} 段。这一段用于增加页面高度，确认状态栏中的页数估算会随着预览内容增长。`,
+      ),
+    ].join("\n");
+    await evaluate(cdp, sessionId, `window.__moye.replace("")`);
+    await evaluate(cdp, sessionId, "window.__moye.focus()");
+    await cdp.send("Input.insertText", { text: longTyped }, sessionId);
+
+    const typedPreview = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const doc = document.querySelector(".preview-paper .pdf-doc");
+            const status = document.querySelector(".statusbar")?.textContent ?? "";
+            return {
+              heading: doc?.querySelector("h1")?.textContent ?? "",
+              text: doc?.textContent ?? "",
+              pages: Number((status.match(/(\\d+)\\s*页/) ?? [])[1] ?? 0),
+              characters: Number((status.match(/(\\d+)\\s*字/) ?? [])[1] ?? 0),
+            };
+          })()`,
+        );
+        return state.heading === "分页估算" &&
+          state.text.includes("分页标记") &&
+          state.pages >= 2 &&
+          state.characters > 500
+          ? state
+          : null;
+      },
+      10_000,
+      "键入后预览与页数估算更新",
+    );
+
+    // Below 900px the panes stack writing-over-preview and the separator is
+    // gone; no extra switching control may appear.
+    await cdp.send(
+      "Emulation.setDeviceMetricsOverride",
+      { width: 800, height: 1000, deviceScaleFactor: 1, mobile: false },
+      sessionId,
+    );
+    const stacked = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const workspace = document.querySelector(".workspace");
+            const writing = document.querySelector('[data-region="writing"]');
+            const preview = document.querySelector('[data-region="preview"]');
+            const handle = document.querySelector('[role="separator"]');
+            if (!workspace || !writing || !preview || !handle) return null;
+            const w = writing.getBoundingClientRect();
+            const p = preview.getBoundingClientRect();
+            return {
+              columns: getComputedStyle(workspace).gridTemplateColumns.split(" ").length,
+              splitter: getComputedStyle(handle).display,
+              stacked: w.bottom <= p.top + 1 && w.top < p.top,
+              controls: Array.from(workspace.querySelectorAll("button"), (button) => ({
+                text: button.textContent?.trim() ?? "",
+                label: button.getAttribute("aria-label"),
+                region: button.closest("[data-region]")?.getAttribute("data-region"),
+              })),
+            };
+          })()`,
+        );
+        return state && state.splitter === "none" && state.stacked ? state : null;
+      },
+      5_000,
+      "窄屏堆叠",
+    );
+    const switchingControls = stacked.controls.filter((control) =>
+      /预览|编辑|切换/.test(`${control.text}${control.label ?? ""}`),
+    );
+    if (stacked.columns !== 1 || switchingControls.length !== 0) {
+      throw new Error(`窄屏布局不对：${JSON.stringify({ ...stacked, switchingControls })}`);
+    }
+    await cdp.send("Emulation.clearDeviceMetricsOverride", {}, sessionId);
 
     console.log("✔ MSFE live 写作面冒烟通过");
     console.log(`  文档往返：${JSON.stringify(roundTrip.slice(0, 24))}…`);
     console.log(`  键入往返：${JSON.stringify(typed)}`);
     console.log(`  刷新恢复：${JSON.stringify(restored)}（${restoredShell.name}）`);
+    console.log(`  预览跟随：${preview.heading}，${preview.pages} 页`);
+    console.log(`  分栏拖动：50% → ${draggedSplit.now}%，刷新后仍为 ${restoredShell.split}%`);
+    console.log(
+      `  键入后预览：${typedPreview.heading}，${typedPreview.characters} 字，${typedPreview.pages} 页`,
+    );
+    console.log(`  窄屏：写作面在上、预览在下，分隔条隐藏（${stacked.columns} 列）`);
     console.log("  中文标题、表格、任务列表、代码块与长链接换行均已投影");
     console.log("  Ctrl+S 写回、Ctrl+Shift+S 另存、Ctrl+O 打开、拖入 Markdown 均通过");
   } finally {
