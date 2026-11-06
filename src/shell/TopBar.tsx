@@ -1,3 +1,4 @@
+import { Show } from "solid-js";
 import { BrandMark, ExportIcon, OpenIcon, SaveIcon, SettingsIcon } from "./icons";
 
 type TopBarProps = {
@@ -5,12 +6,14 @@ type TopBarProps = {
   canExport: boolean;
   onOpen: () => void;
   onSave: () => void;
+  onRename: (name: string) => void;
   onExport: () => void;
   onSettings: () => void;
   onSettingsButton: (button: HTMLButtonElement) => void;
   settingsOpen: boolean;
   exporting: boolean;
-  exportError?: string | null;
+  /** 0–1 while pages render; null while the engine is still measuring. */
+  exportProgress: number | null;
 };
 
 export default function TopBar(props: TopBarProps) {
@@ -29,9 +32,17 @@ export default function TopBar(props: TopBarProps) {
         class="doc-name"
         type="text"
         value={props.fileName}
-        readonly
+        title="文件名"
         spellcheck={false}
         aria-label="文件名"
+        onChange={(event) => {
+          props.onRename(event.currentTarget.value);
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          event.currentTarget.blur();
+        }}
       />
 
       <span class="topbar__spacer" aria-hidden="true" />
@@ -41,7 +52,8 @@ export default function TopBar(props: TopBarProps) {
           class="btn"
           type="button"
           aria-label="打开"
-          title="打开"
+          title="打开（Ctrl/⌘ O）"
+          aria-keyshortcuts="Control+O Meta+O"
           onClick={props.onOpen}
         >
           <OpenIcon />
@@ -52,7 +64,8 @@ export default function TopBar(props: TopBarProps) {
           class="btn"
           type="button"
           aria-label="保存"
-          title="保存"
+          title="保存（Ctrl/⌘ S），另存为（Ctrl/⌘ ⇧ S）"
+          aria-keyshortcuts="Control+S Meta+S Control+Shift+S Meta+Shift+S"
           onClick={props.onSave}
         >
           <SaveIcon />
@@ -65,7 +78,8 @@ export default function TopBar(props: TopBarProps) {
           class="btn btn--primary"
           type="button"
           aria-label="导出 PDF"
-          title={props.exportError ?? "导出 PDF"}
+          title="导出 PDF（Ctrl/⌘ ⇧ E）"
+          aria-keyshortcuts="Control+Shift+E Meta+Shift+E"
           data-action="export"
           aria-busy={props.exporting ? "true" : "false"}
           disabled={props.exporting || !props.canExport}
@@ -91,11 +105,32 @@ export default function TopBar(props: TopBarProps) {
         </button>
       </div>
 
-      {props.exportError ? (
-        <span class="visually-hidden" role="alert">
-          {props.exportError}
-        </span>
-      ) : null}
+      <Show when={props.exporting}>
+        <div
+          class="export-progress"
+          role="progressbar"
+          aria-label="导出进度"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow={
+            props.exportProgress === null
+              ? undefined
+              : Math.round(props.exportProgress * 100)
+          }
+          data-indeterminate={
+            props.exportProgress === null ? "true" : undefined
+          }
+        >
+          <span
+            class="export-progress__bar"
+            style={
+              props.exportProgress === null
+                ? undefined
+                : { width: `${Math.round(props.exportProgress * 100)}%` }
+            }
+          />
+        </div>
+      </Show>
     </header>
   );
 }

@@ -52,6 +52,8 @@ export interface WritingState {
 export interface WritingSessionOptions {
   readonly host: HTMLElement;
   readonly onState: (state: WritingState) => void;
+  /** Runs when the shell asks for an export; kept beside the other shortcuts. */
+  readonly onExport?: () => void;
   /** Defaults to localStorage; pass null to disable drafts. */
   readonly storage?: DraftStorage | null;
 }
@@ -198,6 +200,23 @@ export class WritingSession {
     this.loadDocument(SAMPLE_MARKDOWN, "示例文档.md", null);
   }
 
+  /**
+   * Renames the current document. The normalized name is what the status bar,
+   * the draft and the exported PDF use; writing back to an attached file handle
+   * still restores that file's own name on the next save.
+   */
+  rename(name: string): void {
+    if (this.destroyed) return;
+    const next = normalizeFileName(name);
+    if (next === this.name) return;
+    this.name = next;
+    if (this.hasDocument) {
+      this.cancelDraftTimer();
+      this.persistDraft();
+    }
+    this.emit();
+  }
+
   /** Wraps the selection, or the URL when nothing is selected, in a link. */
   insertLink(url: string): boolean {
     const editor = this.editor;
@@ -315,7 +334,7 @@ export class WritingSession {
         extensions: [StarterKit],
         label: "文档",
         onError: (error) => {
-          console.error("[moye] 编辑器错误", error);
+          console.error("[moye] 写作面错误", error);
         },
       });
       this.editor = editor;
@@ -645,6 +664,9 @@ export class WritingSession {
     } else if (key === "o") {
       event.preventDefault();
       void this.open();
+    } else if (key === "e" && event.shiftKey) {
+      event.preventDefault();
+      this.options.onExport?.();
     }
   }
 

@@ -237,6 +237,7 @@ async function main() {
   const url = `http://127.0.0.1:${address.port}/moye/`;
 
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "moye-smoke-"));
+  const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), "moye-smoke-pdf-"));
   const child = spawn(
     chromePath,
     [
@@ -291,6 +292,11 @@ async function main() {
     );
 
     cdp = await Cdp.connect(version.webSocketDebuggerUrl);
+    await cdp.send("Browser.setDownloadBehavior", {
+      behavior: "allow",
+      downloadPath: downloadDir,
+      eventsEnabled: false,
+    });
     const created = await cdp.send("Target.createTarget", { url });
     targetId = created.targetId;
     const attached = await cdp.send("Target.attachToTarget", {
@@ -382,7 +388,7 @@ async function main() {
           `(() => {
             const doc = document.querySelector(".preview-paper .pdf-doc");
             const status = document.querySelector(".statusbar")?.textContent ?? "";
-            const pages = Number((status.match(/(\\d+)\\s*页/) ?? [])[1] ?? 0);
+            const pages = Number((status.match(/≈\\s*(\\d+)\\s*页/) ?? [])[1] ?? 0);
             return {
               heading: doc?.querySelector("h1")?.textContent ?? "",
               text: doc?.textContent ?? "",
@@ -796,7 +802,7 @@ async function main() {
             return {
               heading: doc?.querySelector("h1")?.textContent ?? "",
               text: doc?.textContent ?? "",
-              pages: Number((status.match(/(\\d+)\\s*页/) ?? [])[1] ?? 0),
+              pages: Number((status.match(/≈\\s*(\\d+)\\s*页/) ?? [])[1] ?? 0),
               characters: Number((status.match(/(\\d+)\\s*字/) ?? [])[1] ?? 0),
             };
           })()`,
@@ -1519,6 +1525,164 @@ async function main() {
     ) {
       throw new Error(`设置面板没有恢复：${JSON.stringify(restoredControls)}`);
     }
+
+    // First-page bands mirror the export's resolved title/footer and hide with
+    // the cover option; they must not need a second pagination model.
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moye.replace(${JSON.stringify(SETTINGS_FIXTURE)})`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelector(".preview-paper .pdf-doc h1")?.textContent === "第一章 起点"`,
+        ),
+      10_000,
+      "页眉页脚 fixture 进入预览",
+    );
+    const hiddenBands = await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelectorAll("[data-preview-band]").length`,
+    );
+    if (hiddenBands !== 0) {
+      throw new Error("首页不显示页眉页脚开启时仍出现预览页眉页脚");
+    }
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-cover");
+        control.checked = false;
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    const previewBands = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const header = document.querySelector('[data-preview-band="header"]');
+            const footer = document.querySelector('[data-preview-band="footer"]');
+            return header && footer
+              ? {
+                  header: header.textContent?.trim() ?? "",
+                  footer: footer.textContent?.trim() ?? "",
+                  headerHeight: header.getBoundingClientRect().height,
+                  footerHeight: footer.getBoundingClientRect().height,
+                }
+              : null;
+          })()`,
+        );
+        return state?.header === "第一章 起点" && state.footer === "第 1 页"
+          ? state
+          : null;
+      },
+      5_000,
+      "预览显示首页页眉页脚",
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-header-title");
+        control.value = "自定义页眉";
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelector('[data-preview-band="header"]')?.textContent?.trim() === "自定义页眉"`,
+        ),
+      5_000,
+      "预览跟随自定义页眉标题",
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-header-title");
+        control.value = "";
+        control.dispatchEvent(new Event("input", { bubbles: true }));
+      })()`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelector('[data-preview-band="header"]')?.textContent?.trim() === "第一章 起点"`,
+        ),
+      5_000,
+      "预览回退到第一个一级标题",
+    );
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-page-numbers");
+        control.checked = false;
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `!document.querySelector('[data-preview-band="footer"]')`,
+        ),
+      5_000,
+      "页脚页码关闭后预览隐藏页脚",
+    );
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-page-numbers");
+        control.checked = true;
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelector('[data-preview-band="footer"]')?.textContent?.trim() === "第 1 页"`,
+        ),
+      5_000,
+      "页脚页码恢复",
+    );
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const control = document.querySelector("#setting-cover");
+        control.checked = true;
+        control.dispatchEvent(new Event("change", { bubbles: true }));
+      })()`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.querySelectorAll("[data-preview-band]").length === 0`,
+        ),
+      5_000,
+      "封面选项隐藏预览页眉页脚",
+    );
+
     await evaluate(
       cdp,
       sessionId,
@@ -1529,6 +1693,153 @@ async function main() {
         evaluate(cdp, sessionId, `!document.querySelector("#settings-dialog")?.open`),
       5_000,
       "关闭设置按钮",
+    );
+
+    // The file name is editable, the session normalizes it, and export uses it
+    // as the PDF name. Ctrl+Shift+E runs the real export and shows its progress.
+    const nameState = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const input = document.querySelector(".doc-name");
+        input.value = "快捷键导出";
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        return { readOnly: input.readOnly };
+      })()`,
+    );
+    if (nameState.readOnly) {
+      throw new Error("顶栏文件名仍然只读");
+    }
+    const renamed = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => ({
+            name: document.querySelector(".doc-name")?.value,
+            fileName: window.__moyeSettings?.getExportSettings()?.fileName,
+            status: document.querySelector(".statusbar")?.textContent ?? "",
+          }))()`,
+        );
+        return state.name === "快捷键导出.md" ? state : null;
+      },
+      10_000,
+      "顶栏文件名可编辑",
+    );
+    if (renamed.fileName !== "快捷键导出.md" || !renamed.status.includes("快捷键导出.md")) {
+      throw new Error(`重命名没有进入导出设置：${JSON.stringify(renamed)}`);
+    }
+
+    await pressShortcut(cdp, sessionId, "e", "KeyE", 69, 10);
+    const exportProgress = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const bar = document.querySelector('.export-progress[role="progressbar"]');
+            const button = document.querySelector('[data-action="export"]');
+            return bar
+              ? {
+                  label: bar.getAttribute("aria-label"),
+                  busy: button?.getAttribute("aria-busy"),
+                  value: bar.getAttribute("aria-valuenow"),
+                }
+              : null;
+          })()`,
+        );
+        return state;
+      },
+      20_000,
+      "Ctrl+Shift+E 导出进度条",
+    );
+    if (exportProgress.label !== "导出进度" || exportProgress.busy !== "true") {
+      throw new Error(`导出进度条状态不对：${JSON.stringify(exportProgress)}`);
+    }
+
+    const exportedPdf = await waitFor(
+      () => {
+        const files = fs
+          .readdirSync(downloadDir)
+          .filter((file) => file.toLowerCase().endsWith(".pdf"));
+        if (files.length === 0) return null;
+        const candidate = path.join(downloadDir, files[0]);
+        const firstSize = fs.statSync(candidate).size;
+        if (firstSize <= 0) return null;
+        return sleep(200).then(() => {
+          const secondSize = fs.statSync(candidate).size;
+          return secondSize === firstSize ? candidate : null;
+        });
+      },
+      120_000,
+      "Ctrl+Shift+E 下载 PDF",
+    );
+    if (path.basename(exportedPdf) !== "快捷键导出.pdf") {
+      throw new Error(`导出文件名没有使用文档名：${path.basename(exportedPdf)}`);
+    }
+
+    // A failed export shows one visible sentence; the next attempt clears it.
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        window.__moyeRealExportElement = window.DocExport.exportElement;
+        window.DocExport.exportElement = async () => {
+          throw new Error("smoke export failure");
+        };
+      })()`,
+    );
+    await pressShortcut(cdp, sessionId, "e", "KeyE", 69, 10);
+    const exportFailure = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const alert = document.querySelector('.statusbar [role="alert"]');
+            const button = document.querySelector('[data-action="export"]');
+            return alert
+              ? {
+                  text: alert.textContent?.trim() ?? "",
+                  title: button?.getAttribute("title"),
+                }
+              : null;
+          })()`,
+        );
+        return state?.text === "导出失败，请重试" ? state : null;
+      },
+      20_000,
+      "导出失败提示可见",
+    );
+    if (exportFailure.title !== "导出 PDF（Ctrl/⌘ ⇧ E）") {
+      throw new Error(`导出按钮 title 没有保留快捷键：${exportFailure.title}`);
+    }
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        window.DocExport.exportElement = async (_element, options) => {
+          options.onProgress?.({ stage: "done", currentPage: 1, totalPages: 1 });
+          return new Blob(["%PDF-1.4"], { type: "application/pdf" });
+        };
+      })()`,
+    );
+    await pressShortcut(cdp, sessionId, "e", "KeyE", 69, 10);
+    const retryState = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => ({
+            alert: document.querySelector('.statusbar [role="alert"]')?.textContent ?? null,
+            busy: document.querySelector('[data-action="export"]')?.getAttribute("aria-busy"),
+          }))()`,
+        );
+        return state.alert === null && state.busy === "false" ? state : null;
+      },
+      20_000,
+      "重试清除导出错误",
     );
 
     console.log("✔ MSFE live 写作面冒烟通过");
@@ -1542,7 +1853,13 @@ async function main() {
     );
     console.log(`  窄屏：写作面在上、预览在下，分隔条隐藏（${stacked.columns} 列）`);
     console.log("  中文标题、表格、任务列表、代码块与长链接换行均已投影");
-    console.log("  Ctrl+S 写回、Ctrl+Shift+S 另存、Ctrl+O 打开、拖入 Markdown 均通过");
+    console.log("  Ctrl+S 写回、Ctrl+Shift+S 另存、Ctrl+O 打开、Ctrl+Shift+E 导出、拖入 Markdown 均通过");
+    console.log(
+      `  预览页眉页脚：${JSON.stringify(previewBands)}（开启封面时隐藏）`,
+    );
+    console.log(
+      `  导出：${path.basename(exportedPdf)}，进度条 ${JSON.stringify(exportProgress)}，失败提示 ${JSON.stringify(exportFailure.text)}，重试后 ${JSON.stringify(retryState)}`,
+    );
     console.log(
       `  空写作面：${emptyState.actions.map((action) => action.text).join(" / ")}，无说明文字`,
     );
@@ -1579,6 +1896,11 @@ async function main() {
       fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 3 });
     } catch {
       /* Chrome may still hold a file on Windows */
+    }
+    try {
+      fs.rmSync(downloadDir, { recursive: true, force: true, maxRetries: 3 });
+    } catch {
+      /* downloaded files may still be held on Windows */
     }
     if (chromeLog && process.env.MOYE_DEBUG) process.stderr.write(chromeLog);
   }

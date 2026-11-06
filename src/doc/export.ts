@@ -2,6 +2,7 @@ import type { DocumentExportSettings } from "./options";
 import { createExportArticle } from "./render";
 import type { ExportDocument } from "./render";
 import { ensureExportRuntime, loadFontBytes } from "./runtime";
+import type { ExportProgress } from "./vendor";
 
 export type PdfExportResult = {
   blob: Blob;
@@ -19,6 +20,7 @@ export type PdfExportResult = {
 export async function exportDocumentToPdf(
   document: ExportDocument,
   settings: DocumentExportSettings,
+  onProgress?: (progress: ExportProgress) => void,
 ): Promise<PdfExportResult> {
   const [fontBytes] = await Promise.all([loadFontBytes(), ensureExportRuntime()]);
 
@@ -50,9 +52,10 @@ export async function exportDocumentToPdf(
       keywords: ["Markdown", "PDF"],
     },
     onProgress: (progress) => {
-      if (progress.stage === "done" && typeof progress.totalPages === "number") {
+      if (typeof progress.totalPages === "number" && progress.totalPages > 0) {
         pages = progress.totalPages;
       }
+      onProgress?.(progress);
     },
   });
 
@@ -60,14 +63,26 @@ export async function exportDocumentToPdf(
     pages = await api.countPages(blob);
   }
 
-  const fileName = pdfFileName(document.title || "未命名");
+  const fileName = pdfFileName(settings.fileName, document.title);
   downloadBlob(blob, fileName);
   return { blob, pages, fileName };
 }
 
-function pdfFileName(title: string): string {
-  const base = title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").trim() || "未命名";
-  return `${base}.pdf`;
+/**
+ * The PDF keeps the document's normalized name; the first H1 is only a fallback
+ * for an empty name. A Markdown suffix becomes `.pdf` instead of being doubled.
+ */
+export function pdfFileName(name: string, fallbackTitle = ""): string {
+  const base = cleanPdfBase(name) || cleanPdfBase(fallbackTitle);
+  return `${base || "未命名"}.pdf`;
+}
+
+function cleanPdfBase(value: string): string {
+  return value
+    .trim()
+    .replace(/\.(?:md|markdown|txt)$/iu, "")
+    .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-")
+    .trim();
 }
 
 function downloadBlob(blob: Blob, fileName: string): void {

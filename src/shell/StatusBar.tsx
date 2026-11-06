@@ -9,6 +9,8 @@ type StatusBarProps = {
   /** Estimate from the preview's laid-out height; pagination belongs to dompdf. */
   pages: number;
   saveState: SaveState;
+  /** One actionable sentence; cleared by the shell when an export retries. */
+  exportError?: string | null;
 };
 
 const SAVE_LABEL: Record<SaveState, string> = {
@@ -30,10 +32,16 @@ export default function StatusBar(props: StatusBarProps) {
 
       <span class="statusbar__file">{props.fileName}</span>
 
+      {props.exportError ? (
+        <span class="statusbar__error" role="alert">
+          {props.exportError}
+        </span>
+      ) : null}
+
       <span class="statusbar__spacer" aria-hidden="true" />
 
       <span class="statusbar__meta">{props.characters} 字</span>
-      <span class="statusbar__meta">{props.pages} 页</span>
+      <span class="statusbar__meta">≈{props.pages} 页</span>
     </footer>
   );
 }

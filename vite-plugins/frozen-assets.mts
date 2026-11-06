@@ -30,9 +30,11 @@ const FROZEN_FILES = [
 const FROZEN_DIRECTORIES = ["fonts"] as const;
 
 /**
- * The preview document embeds `assets/block.png` exactly as `mixed.md` writes
- * it. Serving that directory at `/assets/` keeps the Markdown fixture and the
- * CLI baseline path-identical.
+ * The mixed fixture writes `![…](assets/block.png)`. The dev server maps that
+ * URL to the fixture directory so the preview can resolve the image exactly as
+ * the CLI resolves it relative to the Markdown file. This lookup is dev-only:
+ * fixtures are test inputs, never part of the production bundle. The e2e
+ * harness serves the same directory from its own test server.
  */
 const FIXTURE_ASSETS = {
   directory: path.join("tests", "fixtures", "assets"),
@@ -99,13 +101,15 @@ function collectAssets(root: string): FrozenAsset[] {
     }
   }
 
-  const fixtureDirectory = FIXTURE_ASSETS.directory;
-  for (const relativePath of collectFiles(root, fixtureDirectory)) {
-    const name = path.posix.basename(relativePath);
-    add(FIXTURE_ASSETS.urlPrefix + name, relativePath);
-  }
-
   return assets;
+}
+
+/** Fixture images for the dev server only; never emitted by `generateBundle`. */
+function collectFixtureAssets(root: string): FrozenAsset[] {
+  return collectFiles(root, FIXTURE_ASSETS.directory).map((relativePath) => ({
+    urlPath: FIXTURE_ASSETS.urlPrefix + path.posix.basename(relativePath),
+    filePath: path.join(root, relativePath),
+  }));
 }
 
 function contentType(filePath: string): string {
@@ -122,6 +126,11 @@ export default function frozenAssets(): Plugin {
     configResolved(config) {
       assets = collectAssets(config.root);
       lookup = new Map(assets.map((asset) => [asset.urlPath, asset.filePath]));
+      if (config.command === "serve") {
+        for (const fixture of collectFixtureAssets(config.root)) {
+          lookup.set(fixture.urlPath, fixture.filePath);
+        }
+      }
     },
 
     configureServer(server) {

@@ -68,6 +68,7 @@ interface MoyeExportSettingsSnapshot {
   pageBreakOnH1: boolean;
   compress: boolean;
   background: string;
+  fileName: string;
 }
 
 interface MoyeSettingsHook {

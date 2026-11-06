@@ -49,6 +49,7 @@ export type PaperMetrics = {
 
 export type ExportProgress = {
   stage?: string;
+  currentPage?: number;
   totalPages?: number;
 };
 
@@ -79,16 +80,11 @@ export type DocExportApi = {
   countPages(blob: Blob): Promise<number>;
 };
 
-export type PrepareDocApi = {
-  prepare(root: HTMLElement, options: { pageBreakOnH1?: boolean }): HTMLElement;
-};
-
 declare global {
   var marked: MarkedApi | undefined;
   var DOMPurify: PurifyApi | undefined;
   var MOYE_THEMES: ThemeTable | undefined;
   var DocExport: DocExportApi | undefined;
-  var PrepareDoc: PrepareDocApi | undefined;
 }
 
 export {};

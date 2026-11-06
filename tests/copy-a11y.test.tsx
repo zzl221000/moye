@@ -3,13 +3,16 @@ import { resolve } from "node:path";
 import { render } from "@solidjs/web";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
+import { exportDocumentToPdf } from "../src/doc/export";
 import { DRAFT_STORAGE_KEY } from "../src/writing/draft";
 import mixedMarkdown from "./fixtures/mixed.md?raw";
 
-// The export error state is exercised without loading the dompdf runtime.
+// The export states are exercised without loading the dompdf runtime.
 vi.mock("../src/doc/export", () => ({
-  exportDocumentToPdf: () => Promise.reject(new Error("boom")),
+  exportDocumentToPdf: vi.fn(() => Promise.reject(new Error("boom"))),
 }));
+
+const exportMock = vi.mocked(exportDocumentToPdf);
 
 /**
  * Copy is enforced by shape, not by an allowlist of today's strings:
@@ -433,7 +436,7 @@ describe("accessibility", () => {
     );
   });
 
-  it("shows a failed export as one actionable sentence", async () => {
+  it("shows a failed export as one visible actionable sentence", async () => {
     seedDraft(mixedMarkdown);
     const root = mount();
     const button = root.querySelector<HTMLButtonElement>('[data-action="export"]');
@@ -444,11 +447,12 @@ describe("accessibility", () => {
     await tick();
     await tick();
 
-    const alert = root.querySelector<HTMLElement>('[role="alert"]');
+    const alert = root.querySelector<HTMLElement>(".statusbar [role='alert']");
     expect(alert?.textContent?.trim()).toBe("导出失败，请重试");
+    expect(alert?.closest(".visually-hidden")).toBeNull();
     expectOneActionableSentence(alert?.textContent ?? "", "export alert");
     expect(alert?.textContent).not.toContain("boom");
-    expect(button?.title).toBe("导出失败，请重试");
+    expect(button?.title).toBe("导出 PDF（Ctrl/⌘ ⇧ E）");
     expect(
       errorLog.mock.calls.some(
         ([value]) => value instanceof Error && value.message === "boom",
@@ -456,5 +460,83 @@ describe("accessibility", () => {
       "the technical cause must stay in the console",
     ).toBe(true);
     errorLog.mockRestore();
+
+    // A retry clears the sentence before it can fail or succeed again.
+    exportMock.mockImplementationOnce(async () => ({
+      blob: new Blob(),
+      pages: 1,
+      fileName: "mixed.pdf",
+    }));
+    button?.click();
+    await tick();
+    await tick();
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("starts an export from the keyboard shortcut", async () => {
+    seedDraft(mixedMarkdown);
+    const root = mount();
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "e",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await tick();
+    await tick();
+
+    expect(
+      root.querySelector<HTMLElement>(".statusbar [role='alert']")
+        ?.textContent,
+    ).toBe("导出失败，请重试");
+    expect(
+      errorLog.mock.calls.some(
+        ([value]) => value instanceof Error && value.message === "boom",
+      ),
+    ).toBe(true);
+    errorLog.mockRestore();
+  });
+
+  it("shows real page progress while exporting", async () => {
+    seedDraft(mixedMarkdown);
+    const root = mount();
+    const control: { finish?: () => void } = {};
+
+    exportMock.mockImplementationOnce(
+      (_document, _settings, onProgress) =>
+        new Promise((resolveResult) => {
+          onProgress?.({
+            stage: "rendering",
+            currentPage: 1,
+            totalPages: 4,
+          });
+          control.finish = () => {
+            resolveResult({
+              blob: new Blob(),
+              pages: 4,
+              fileName: "mixed.pdf",
+            });
+          };
+        }),
+    );
+
+    root.querySelector<HTMLButtonElement>('[data-action="export"]')?.click();
+    await tick();
+
+    const bar = root.querySelector<HTMLElement>('[role="progressbar"]');
+    expect(bar).not.toBeNull();
+    expect(bar?.getAttribute("aria-label")).toBe("导出进度");
+    expect(bar?.getAttribute("aria-valuenow")).toBe("25");
+    expect(bar?.closest(".topbar")).not.toBeNull();
+
+    control.finish?.();
+    await tick();
+    await tick();
+    expect(root.querySelector('[role="progressbar"]')).toBeNull();
   });
 });

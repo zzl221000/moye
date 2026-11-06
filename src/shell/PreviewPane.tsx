@@ -1,4 +1,4 @@
-import { createEffect, createSignal } from "solid-js";
+import { createEffect, createSignal, Show } from "solid-js";
 import { estimatePageCount } from "../doc/page-estimate";
 import type { PageMetrics } from "../doc/paper";
 import type { ExportDocument } from "../doc/render";
@@ -9,6 +9,10 @@ type PreviewPaneProps = {
   background: string;
   pageContentHeightPx: number;
   h1Break: boolean;
+  /** Resolved header title, exactly as the export resolves it. */
+  headerTitle: string;
+  pageNumbers: boolean;
+  cover: boolean;
   onPageEstimate: (pages: number) => void;
 };
 
@@ -93,11 +97,43 @@ export default function PreviewPane(props: PreviewPaneProps) {
             "--moye-preview-zoom": String(zoom()),
           }}
         >
+          {/*
+            The preview is one continuous sheet, so these are the first page's
+            bands, not a second pagination model: dompdf still owns every page
+            boundary. They mirror the export's resolved title and page-number
+            footer, and vanish with the cover option exactly like page 1 does.
+          */}
+          <Show when={!props.cover && props.headerTitle !== ""}>
+            <div
+              class="preview-paper__band preview-paper__band--header"
+              data-preview-band="header"
+              style={{
+                height: `${props.paper.headerHeight}px`,
+                color: props.document.headerColor,
+              }}
+            >
+              {props.headerTitle}
+            </div>
+          </Show>
+
           <div
             class="preview-paper__content"
             ref={(element) => setContent(element)}
             innerHTML={props.document.html}
           />
+
+          <Show when={!props.cover && props.pageNumbers}>
+            <div
+              class="preview-paper__band preview-paper__band--footer"
+              data-preview-band="footer"
+              style={{
+                height: `${props.paper.footerHeight}px`,
+                color: props.document.footerColor,
+              }}
+            >
+              第 1 页
+            </div>
+          </Show>
         </div>
       </div>
     </section>
