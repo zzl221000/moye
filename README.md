@@ -1,99 +1,65 @@
 # 墨页 · Markdown → PDF
 
-双栏 Markdown 编辑器 + 纯前端矢量 PDF 导出，PDF 引擎是 [dompdf.js](https://dompdfjs.lisky.com.cn/)。
-运行时零依赖，不需要打包（`build.mjs` 只做文件拷贝）。不联网也能跑，字体和库都在本地。
+本地优先的 Markdown 写作面与 PDF 导出工具。写作面是 QuireKit MSFE 的 live 呈现，右侧版式预览与导出共用同一份渲染结果，PDF 由 dompdf.js 在浏览器内生成。
+
+运行时不访问网络：应用、字体、Markdown 解析器与 PDF 内核都是同源静态资源，文档内容不离开本机。只有 Markdown 里显式写出的远程图片会按原 URL 请求。
+
+## 目录
 
 ```
-md-pdf/
-├─ index.html            编辑器（CodeMirror + A4 版式预览）
-├─ app.js                界面逻辑、导出、设置、快捷键
-├─ prepare.js            导出前处理（分页属性、长 token、任务列表）
-├─ export-doc.js         共用的导出核心（编辑器与 CLI 都走这里）
-├─ themes.js             主题 CSS 组（编辑器与 CLI 共用）
-├─ export.mjs            CLI：Markdown → PDF（headless Chrome + CDP）
-├─ build.mjs             生成 dist/：纯拷贝 + .nojekyll / CNAME
-├─ serve.mjs             本地静态服务器（支持 --dir / --port）
-├─ start.cmd             Windows 一键启动
+moye/
+├─ index.html
+├─ src/
+│  ├─ main.tsx            应用入口
+│  ├─ App.tsx             外壳装配与状态
+│  ├─ doc/                渲染接缝、导出、设置、纸型、页数估算
+│  ├─ shell/              顶栏、写作面、插入栏、版式预览、设置、状态栏
+│  ├─ writing/            草稿、文件读写、插入、统计
+│  └─ styles/             设计 token 与应用样式
 ├─ styles/
-│  ├─ app.css            界面样式（Operate 风格，浅色纸感）
-│  └─ doc.css           文档/PDF 排版（预览与 PDF 共用）
-├─ vendor/               CodeMirror 5、marked、DOMPurify、dompdf.js
-├─ fonts/                Source Han Sans SC（思源黑体）TTF + OFL.txt
-├─ THIRD-PARTY.md        第三方许可
+│  ├─ doc.css             文档/PDF 排版（冻结）
+│  └─ export-host.css     预览与导出的字体注册（冻结）
+├─ export-doc.js          浏览器导出核心（冻结）
+├─ prepare.js             导出前处理（冻结）
+├─ themes.js              文档主题（冻结）
+├─ export.mjs             CLI：Markdown → PDF
+├─ vendor/                dompdf.js、marked、DOMPurify（冻结）
+├─ fonts/                 思源黑体与 OFL
+├─ tests/                 渲染快照、PDF 基线、端到端导出、写作面冒烟
+├─ vite-plugins/          冻结资源的开发服务与构建输出
 └─ .github/workflows/pages.yml
 ```
 
-## 一、打开编辑器
+## 开发
 
-双击 `start.cmd`，或：
+使用 bun 1.3.13；测试与 CLI 需要 Node.js 22+。
 
 ```bash
-node serve.mjs            # http://127.0.0.1:8777
+bun install
+bun run dev             # http://localhost:5173/moye/
+bun run build           # → dist/
+bun run preview         # 预览 dist/，同样在 /moye/
+bun run typecheck
+bun run test
+bun run test:e2e        # 构建 → 无头浏览器 → 导出 PDF → 比对基线
+bun run smoke:writing   # 写作面冒烟，需要 Chrome/Edge
 ```
 
-不要直接双击 `index.html`。`file://` 下浏览器会拦截字体请求，中文在 PDF 里会变成方框；
-dompdf 的 Worker 也可能被安全策略挡住。
+`test:e2e` 还需要 `pdftotext`（poppler-utils 或 xpdf）。`CHROME_PATH` 可指定 Chrome/Edge 路径。
 
-快捷键：
+工具链锁定精确版本：`solid-js@2.0.0-rc.21`、`@solidjs/web@2.0.0-rc.21`、`@solidjs/vite-plugin@3.0.0-next.56`、`vite@8.3.6`、`vitest@5.1.0`、`typescript@5.9.3`、`jsdom@31.0.0`、`@types/node@26.6.6`、`@quirekit/msfe-core@0.0.1`、`@quirekit/msfe-starter-kit@0.0.1`。升级是单独的决定，需要同时更新 `bun.lock`。
 
-| 操作 | Windows / Linux | macOS |
-| --- | --- | --- |
-| 保存 / 写回文件 | `Ctrl+S` | `⌘S` |
-| 另存为 | `Ctrl+Shift+S` | `⌘⇧S` |
-| 导出 PDF | `Ctrl+Shift+E` | `⌘⇧E` |
-| 打开文件 | `Ctrl+O` | `⌘O` |
+## 使用
 
-右上角设置里可以改纸张（A4 / A4 横向 / Letter）、页边距、页眉标题、
-页脚页码、首页不显示页眉页脚、每个 H1 另起一页、是否压缩，以及文档主题、
-页面背景、细节 CSS、编辑模式和双栏同步滚动。
+打开：顶栏「打开」、`Ctrl/⌘ O`，或把 `.md` 文件拖进窗口。保存：`Ctrl/⌘ S` 写回原文件，`Ctrl/⌘ ⇧ S` 另存。导出：顶栏「导出 PDF」。
 
-导出后提示条里有「打开」，会用新标签页打开生成的 PDF，方便立即检查分页。
+设置分三组：纸张（纸张、页边距）、版式（页眉标题、页脚页码、首页不显示页眉页脚、一级标题另起页）、文档（文档主题、页面背景、细节 CSS、压缩 PDF 体积）。
 
-### 保存到原文件
+Chrome / Edge 在 HTTPS 或 localhost 下通过 File System Access API 写回原文件；Firefox / Safari 降级为下载副本。文件句柄只在当前会话有效，刷新后需要重新打开文件；草稿自动保存在 localStorage。
 
-Chrome / Edge（HTTPS 或 localhost）下，「打开」「保存」走浏览器
-[File System Access API](https://developer.mozilla.org/docs/Web/API/File_System_API)：
+窄屏下写作面在上、版式预览在下。分栏比例、设置与草稿都保存在 localStorage。
 
-- 打开文件后记住句柄，`Ctrl+S` **直接写回原文件**，不再下载
-- `Ctrl+Shift+S` 另存为；修改文件名后保存也会新建文件
-- 把 `.md` 拖进页面同样会拿到句柄，后续保存写回
-- 首次写入会请求权限，拒绝则取消本次保存
-- Firefox / Safari 没有这个 API，自动降级为下载副本（设置底部会显示当前状态）
-- 句柄只在当前会话有效；刷新后重新「打开」即可。草稿仍会自动暂存在 localStorage
-
-### 编辑模式
-
-设置 → 编辑器 → 编辑模式：
-
-- **Markdown · 语法高亮**：标题、强调、链接、代码、列表标记着色，开启括号自动补全、
-  括号匹配和回车续写列表。默认模式。
-- **纯文本 · 无高亮**：关闭语法着色、自动补全、括号匹配和列表续写，适合粘贴原文、
-  整理纯文本或不想被自动补全打断时使用。
-
-模式只影响编辑区的显示和输入辅助，不改变 Markdown 内容；右侧预览和导出的 PDF
-仍然按 Markdown 渲染。CodeMirror 是源码编辑器，**不提供所见即所得**（不会隐藏 `#`、
-把粗体就地渲染）；需要那种效果得换 HyperMD、TipTap / Milkdown 等编辑器。
-
-### 主题与细节 CSS
-
-设置面板里的「文档样式」：
-
-- **主题**：纸张 / 刊物 / 紧凑 / 石墨（深色），是一组作用在 `.pdf-doc` 上的 CSS 组
-- **页面背景**：同时作用于预览纸张和 PDF 页面底色
-- **细节 CSS**：实时生效，导出时一起写入 PDF
-- **双栏同步滚动**：默认开启，按滚动比例同步编辑器和预览
-
-```css
-/* 细节 CSS 示例 */
-.pdf-doc { font-size: 15px; }
-.pdf-doc h1 { color: #8a3b22; }
-.pdf-doc table { font-size: 13px; }
-```
-
-主题定义在 `themes.js`，可以按同样结构加一组。自定义 CSS 建议只写 `.pdf-doc ...`
-选择器；换 `font-family` 需要额外嵌入 TTF，否则 PDF 里的中文可能缺字。
-
-## 二、命令行导出（适合 Zed / 脚本 / CI）
+## 命令行导出（Zed / 脚本 / CI）
 
 ```bash
 node export.mjs 报告.md
@@ -117,16 +83,11 @@ node export.mjs 报告.md --theme dark --css my.css --background '#0d1117'
 | `--no-compress` | 不压缩 PDF 流 |
 | `--open` | 生成后用默认阅读器打开 |
 
-原理：起一个临时 HTTP 服务 → headless Chrome 打开导出页 →
-`Runtime.evaluate` 调 dompdf.js → 把 base64 PDF 写回磁盘。用的是 Node 内置
-`WebSocket`，所以零依赖。需要 **Node 22+**。找不到 Chrome 时设置 `CHROME_PATH`（Edge 也可以）。
+CLI 起一个临时 HTTP 服务，用 headless Chrome 打开导出页，再调用 dompdf.js 把 base64 PDF 写回磁盘。需要 **Node 22+**；找不到 Chrome 时设置 `CHROME_PATH`（Edge 也可以）。Markdown 里的相对图片路径按 `.md` 所在目录解析。
 
-Markdown 里的相对图片路径会按 `.md` 所在目录解析，例如 `![](images/a.png)`。
+## 在 Zed 中使用
 
-## 三、放到 Zed 里
-
-Zed 的扩展系统**不能**做这件事（详见下文），可行的方式是「任务 + CLI」。
-本目录自带 `.zed/tasks.json`（如果应用在子目录里，把参数改成 `$ZED_WORKTREE_ROOT/md-pdf/export.mjs`）：
+本目录自带 `.zed/tasks.json`。若墨页位于子目录，把参数改成 `$ZED_WORKTREE_ROOT/md-pdf/export.mjs`：
 
 ```json
 {
@@ -140,138 +101,36 @@ Zed 的扩展系统**不能**做这件事（详见下文），可行的方式是
 }
 ```
 
-在 Zed 里对 Markdown 文件执行 `task: spawn`（默认 `alt-shift-r` / `cmd-shift-r`，
-以你的 keymap 为准），选 “Markdown → PDF (dompdf)”。会在源文件旁边生成同名 PDF。
+在 Zed 里对 Markdown 文件执行 `task: spawn`，选择 “Markdown → PDF (dompdf)”。
 
-如果你把 `md-pdf` 放在别的项目里，按实际路径改第一段参数即可。
+## 导出链路
 
-### 为什么 Zed 扩展做不了
+- 预览与导出共用 `src/doc/render.ts`：Markdown 经 marked 解析、DOMPurify 净化，得到 `.pdf-doc` HTML。
+- 导出时把同一份 HTML 交给冻结的 `export-doc.js` 与 `vendor/dompdf.min.js`；分页只由 dompdf 决定，预览不模拟页边界。
+- CLI `export.mjs` 在 headless Chrome 里运行同一条链路。
+- `themes.js` 提供文档主题，`styles/doc.css` 是预览与 PDF 共用的文档排版。
 
-Zed 的 `extension.toml` 只能提供这些能力：
+## 已知限制
 
-- Languages（语法、LSP、tree-sitter）
-- Themes / Icon Themes
-- Snippets
-- Debuggers（DAP）
-- MCP Servers
-- Agent Server Extensions（ACP）
+- 跨页表格不会重复表头，长表格的第二页直接从数据行开始。
+- File System Access API 只有 Chromium 系完整支持，写回需要 HTTPS 或 localhost。
+- 状态栏页数由预览高度估算，最终页数以 dompdf 导出为准。
+- 不支持 Mermaid、KaTeX、Obsidian 双链等扩展语法；新增语法需要扩展共享渲染接缝。
+- 远程图片需要服务端返回 CORS 头，否则会被跳过。
+- 字体只打包了思源黑体 Regular，粗体由渲染器合成。
 
-`Extension` trait 里只有 language server、DAP、context server、slash command、
-docs index 这些入口；没有命令面板项、没有菜单、没有面板、没有 webview。
-slash command 的输出只能进 Agent 面板，不能操作编辑器或生成文件。
+## 部署
 
-更根本的是：Zed 的 Markdown 预览是 GPUI 原生渲染，不存在 DOM/CSSOM。
-dompdf.js 依赖 `getComputedStyle`、布局盒模型和 Web Worker，在 Zed 里没有可读的页面。
+项目站地址是 `https://zzl221000.github.io/moye/`。`vite.config.mts` 的 `PAGES_BASE` 为 `/moye/`，开发、预览与构建产物使用同一路径，子路径部署不需要额外配置。
 
-因此：**Zed 里没有「导出 PDF 按钮」这种插件形态**，任务 + CLI 是它的原生集成方式。
+`.github/workflows/pages.yml` 在 push 到 `main` / `master` 时执行 `bun install --frozen-lockfile` 与 `bun run build`，发布 `dist/`。在仓库 Settings → Pages → Source 选择 **GitHub Actions**。
 
-## 四、导出质量做了哪些处理
+如果墨页只是大仓库里的一个子目录，需要在 workflow 里设置 `working-directory`、调整 artifact 路径，并把 workflow 移到仓库根的 `.github/workflows/`。
 
-这套排版针对中文报告做过调整，直接改 `styles/doc.css` 即可：
+构建产物是纯静态文件，`public/.nojekyll` 会复制进 `dist/`，不需要服务端。
 
-- **代码换行**：`pre` / `code` 用 `white-space: pre-wrap` + `overflow-wrap: anywhere`，
-  并把 `pre` 的 `overflow` 设为 `visible`。这是最初「PDF 里代码不换行」的根因：
-  很多主题只改了 `code`，但 `pre` 的 `white-space: pre` 优先级更高。
-- **表格宽度**：普通单元格保持自然宽度，只给含长 URL / 长标识符的单元格加
-  `.cell-wrap-anywhere`，避免数字列被压成三行。
-- **对齐**：marked 输出的 `align="right"` 在 CSS 里显式恢复，金额列才会右对齐。
-- **中文嵌入**：`fontConfig` + `langFontConfig` 都用思源黑体，并保证预览与 PDF
-  使用同一套字形度量，否则换行位置会和 PDF 对不上。
-- **标题孤行**：调用 dompdf 的 `computePageBreaks()`，把落在页尾 96px 内、
-  且后面紧跟表格/代码块的标题推到下一页。
-- **分页**：小表格/短代码块加 `divisionDisable` 尽量不拆；超过 420px 的表格允许
-  跨页。需要强制换页的元素加 `pageBreak` 属性。
-- **首页**：默认第 1 页不显示页眉页脚（封面页），可在设置里关闭。
+## 字体与第三方
 
-## 五、已知限制
+`fonts/SourceHanSansSC-Regular.ttf` 来自 dompdf.js 示例仓库，使用 SIL Open Font License 1.1，完整文本在 `fonts/OFL.txt`。
 
-- 跨页的**表格不会重复表头**（dompdf 当前不支持重复 `<thead>`）。长表格的第二页
-  直接从数据行开始。
-- File System Access API 目前只有 Chromium 系（Chrome / Edge）完整支持；Firefox / Safari
-  会降级为下载。写回需要 HTTPS 或 localhost。
-- 编辑区只做源码语法高亮，不提供所见即所得；格式化结果看右侧预览
-- 不支持 Mermaid、KaTeX、Obsidian 双链等扩展语法；需要的话可在 `app.js` 里加
-  marked 扩展。
-- 远程图片需要服务端返回 CORS 头（导出时 `useCORS: true`），否则会被跳过。
-- 字体现在是同源加载；GitHub Pages 本身由 Fastly CDN 提供，字体已经是 CDN 响应。
-  若要换到自己的 OSS/jsDelivr，需要同时改 `index.html` 的 `@font-face`/preload 和
-  `app.js` 的 `fetch` 地址，并确保 CDN 返回 `Access-Control-Allow-Origin`。
-  换 CDN 不会减小 4.5MB 体积，真正省流量还是用上面的 `pyftsubset`。
-- 思源黑体只打包了 Regular。粗体由渲染器合成；如果你需要真正的 Bold，
-  把 `SourceHanSansSC-Bold.ttf` 放进 `fonts/`，并在 `export-doc.js` 的
-  `fontConfig` 里再注册一条 `fontWeight: 700`。
-- 移动端只做「整页缩放到宽度」，正文会很小；这是桌面写作工具。
-
-
-## 六、字体与第三方
-
-- `fonts/SourceHanSansSC-Regular.ttf` 来自 dompdf.js 示例仓库，
-  Source Han Sans 使用 SIL Open Font License 1.1。
-- dompdf.js — MIT；CodeMirror 5 — MIT；marked — MIT；DOMPurify — MPL-2.0 / Apache-2.0。
-  许可文本见各自的上游仓库。
-
-## 七、部署为纯静态站点
-
-墨页没有后端：字体、WASM、Worker、PDF 写入全部在浏览器里完成，放到 GitHub Pages
-或任意静态空间就能用。构建脚本只做拷贝，不打包、不压缩。
-
-```bash
-node build.mjs                            # → dist/
-node build.mjs --out docs                 # → docs/，适合 Pages 的「分支 /docs」
-node build.mjs --domain md.example.com    # 额外生成 CNAME
-node serve.mjs --dir dist --port 8899     # 本地验证发布产物
-```
-
-### GitHub Pages（Actions，推荐）
-
-把 `md-pdf/` 当作仓库根目录推送，在 Settings → Pages → Source 选择
-**GitHub Actions**。已带 `.github/workflows/pages.yml`：push 后自动
-`node build.mjs` 并发布 `dist/`。
-
-如果它只是大仓库里的一个子目录，按 workflow 里的注释改两处：
-`working-directory: md-pdf` 和 `path: md-pdf/dist`；同时把 workflow 文件从
-`md-pdf/.github/workflows/` 移到仓库根的 `.github/workflows/`（GitHub 只读根目录）。
-
-项目站地址是 `https://<user>.github.io/<repo>/`。所有资源都是相对路径，
-子路径部署不需要改任何配置；把整个目录一起部署，不要拆散 `styles/ vendor/ fonts/`。
-
-### GitHub Pages（分支 /docs）
-
-```bash
-node build.mjs --out docs
-git add docs && git commit -m "build md-pdf"
-```
-
-Settings → Pages → Source: Deploy from a branch → `main` / `/docs`。
-`.nojekyll` 已自动生成，Jekyll 不会碰这些文件。
-
-### 自定义域名
-
-```bash
-node build.mjs --domain md.example.com
-```
-
-也可以在 Pages 设置里直接填。DNS：
-
-- 子域名：`CNAME` 指向 `<user>.github.io`
-- 顶级域：`A` 记录指向 GitHub Pages 的地址（以 GitHub 文档为准）
-- 最后开启 **Enforce HTTPS**
-
-### 体积与字体裁剪
-
-首屏约 **5.6MB**，其中 4.5MB 是思源黑体；HTTP 缓存后再次访问很快，导出的 PDF 只有几十到
-一百多 KB。如果要给公网省流量，可以按用字裁剪字体：
-
-```bash
-pip install fonttools
-pyftsubset fonts/SourceHanSansSC-Regular.ttf \
-  --text-file=报告用字.txt \
-  --unicodes="U+0020-007E,U+00A0-00FF,U+3000-303F" \
-  --output-file=fonts/SourceHanSansSC-Regular.ttf
-```
-
-字体名不变，`@font-face` 和 `fontConfig` 都不用改。裁掉的字在 PDF 里会缺字，
-按你的文档实际用字确认后再上线。
-
-> 不要用 `file://` 直接打开部署后的 `index.html`；字体和 Worker 需要 HTTP(S)。GitHub Pages
-> 自带 HTTPS，本地用 `serve.mjs`。
+运行时的 dompdf.js、marked、DOMPurify，QuireKit MSFE 与 Solid，以及构建期的 Vite、TypeScript、Vitest 等许可见 `THIRD-PARTY.md`。

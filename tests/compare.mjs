@@ -2,7 +2,7 @@
 /**
  * PDF export baseline — compare the current CLI output against golden values.
  *
- *   node tests/compare.mjs            compare every tests/fixtures/*.md
+ *   node tests/compare.mjs            compare the baseline fixtures
  *   node tests/compare.mjs --update   regenerate tests/golden/*.json
  *   node tests/compare.mjs --keep     keep the exported PDFs for inspection
  *
@@ -41,6 +41,13 @@ function flagValue(name) {
 }
 
 const sourceRef = flagValue("source");
+
+/**
+ * Only these fixtures define the PDF baseline. `multi-h1.md` is a unit fixture
+ * for header-title selection, so it must not acquire a golden file just because
+ * it lives next to the baseline documents.
+ */
+const BASELINE_FIXTURES = ["simple", "mixed", "long"];
 
 const unknownFlags = argv.filter(
   (arg) => arg.startsWith("-") && arg !== "--update" && arg !== "--keep" && arg !== "--source" && !arg.startsWith("--source=")
@@ -316,15 +323,17 @@ function exportFixture(fixturePath, tmpDir, name) {
 
 function discoverFixtures() {
   if (!fs.existsSync(fixturesDir)) return [];
-  return fs
-    .readdirSync(fixturesDir)
-    .filter((name) => name.toLowerCase().endsWith(".md"))
-    .sort()
-    .map((name) => ({
-      name: path.basename(name, path.extname(name)),
-      file: path.join(fixturesDir, name),
-      relative: path.posix.join("tests/fixtures", name),
-    }));
+  return BASELINE_FIXTURES.map((name) => {
+    const file = path.join(fixturesDir, `${name}.md`);
+    if (!fs.existsSync(file)) {
+      throw new Error(`缺少基线 fixture：${path.relative(repoRoot, file)}`);
+    }
+    return {
+      name,
+      file,
+      relative: path.posix.join("tests/fixtures", `${name}.md`),
+    };
+  });
 }
 
 function capture(fixture, tmpDir) {
