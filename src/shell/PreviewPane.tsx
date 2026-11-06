@@ -117,6 +117,21 @@ export default function PreviewPane(props: PreviewPaneProps) {
     },
   );
 
+  // The preview is a visual projection: its content is aria-hidden, so links
+  // inside it must stay out of the tab order instead of being focusable but
+  // invisible to assistive technology.
+  createEffect(
+    () => ({ element: stack(), document: props.document, pages: pages() }),
+    ({ element }) => {
+      if (!element) return;
+      queueMicrotask(() => {
+        for (const link of element.querySelectorAll<HTMLElement>("a[href]")) {
+          link.tabIndex = -1;
+        }
+      });
+    },
+  );
+
   // Continuous fallback only. The measured height is divided by CSS zoom to
   // recover the layout height, exactly as the pre-pagination preview did.
   createEffect(

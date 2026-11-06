@@ -127,6 +127,18 @@ describe("墨页 shell", () => {
     expect(status?.textContent).not.toContain("已保存");
   });
 
+  it("keeps preview links out of the tab order because the projection is aria-hidden", async () => {
+    seedDraft("[链接](https://example.com)\n", "链接.md");
+    const root = mount();
+    await Promise.resolve();
+
+    const content = root.querySelector(".preview-paper__content");
+    expect(content?.getAttribute("aria-hidden")).toBe("true");
+    const link = content?.querySelector("a[href]");
+    expect(link).toBeInstanceOf(HTMLAnchorElement);
+    expect((link as HTMLAnchorElement).tabIndex).toBe(-1);
+  });
+
   it("shows first-page bands from the resolved header and page number", async () => {
     seedDraft(mixedMarkdown, "bands.md");
     localStorage.setItem(
