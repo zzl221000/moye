@@ -782,7 +782,7 @@ async function main() {
       "分页标记：预览与状态栏随键入更新。",
       "",
       ...Array.from(
-        { length: 50 },
+        { length: 120 },
         (_, index) =>
           `第 ${index + 1} 段。这一段用于增加页面高度，确认状态栏中的页数估算会随着预览内容增长。`,
       ),
@@ -816,6 +816,112 @@ async function main() {
       },
       10_000,
       "键入后预览与页数估算更新",
+    );
+
+    // Synced scrolling: scrolling either pane moves the other by the fraction
+    // of its scroll range, with no visible control.
+    const scrollGeometry = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const writing = document.querySelector(".writing-host .cm-scroller");
+            const preview = document.querySelector('[data-region="preview"]');
+            if (!writing || !preview) return null;
+            return {
+              writingMax: Math.max(0, writing.scrollHeight - writing.clientHeight),
+              previewMax: Math.max(0, preview.scrollHeight - preview.clientHeight),
+              wide: window.matchMedia("(min-width: 900px)").matches,
+            };
+          })()`,
+        );
+        return state && state.wide && state.writingMax > 0 && state.previewMax > 0
+          ? state
+          : null;
+      },
+      5_000,
+      "联动滚动所需的两栏可滚动内容",
+    );
+    const writingScrollTop = Math.round(scrollGeometry.writingMax * 0.4);
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector(".writing-host .cm-scroller").scrollTop = ${writingScrollTop}`,
+    );
+    // Read both panes live: CodeMirror may settle its own scrollTop by a few
+    // pixels after the assignment, and the sync must map the settled value.
+    const followedPreview = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const writing = document.querySelector(".writing-host .cm-scroller");
+            const preview = document.querySelector('[data-region="preview"]');
+            if (!writing || !preview) return null;
+            return {
+              sourceTop: writing.scrollTop,
+              sourceMax: Math.max(0, writing.scrollHeight - writing.clientHeight),
+              targetTop: preview.scrollTop,
+              targetMax: Math.max(0, preview.scrollHeight - preview.clientHeight),
+            };
+          })()`,
+        );
+        if (
+          !state ||
+          state.sourceTop <= 0 ||
+          state.sourceMax <= 0 ||
+          state.targetMax <= 0
+        ) {
+          return null;
+        }
+        const expected = (state.sourceTop / state.sourceMax) * state.targetMax;
+        return Math.abs(state.targetTop - expected) < 2
+          ? { ...state, expected }
+          : null;
+      },
+      5_000,
+      "滚动写作面带动预览",
+    );
+    const previewScrollTop = Math.round(followedPreview.targetMax * 0.7);
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('[data-region="preview"]').scrollTop = ${previewScrollTop}`,
+    );
+    const followedWriting = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const writing = document.querySelector(".writing-host .cm-scroller");
+            const preview = document.querySelector('[data-region="preview"]');
+            if (!writing || !preview) return null;
+            return {
+              sourceTop: preview.scrollTop,
+              sourceMax: Math.max(0, preview.scrollHeight - preview.clientHeight),
+              targetTop: writing.scrollTop,
+              targetMax: Math.max(0, writing.scrollHeight - writing.clientHeight),
+            };
+          })()`,
+        );
+        if (
+          !state ||
+          state.sourceTop <= 0 ||
+          state.sourceMax <= 0 ||
+          state.targetMax <= 0
+        ) {
+          return null;
+        }
+        const expected = (state.sourceTop / state.sourceMax) * state.targetMax;
+        return Math.abs(state.targetTop - expected) < 2
+          ? { ...state, expected }
+          : null;
+      },
+      5_000,
+      "滚动预览带动写作面",
     );
 
     // Below 900px the panes stack writing-over-preview and the separator is
@@ -860,6 +966,42 @@ async function main() {
     );
     if (stacked.columns !== 1 || switchingControls.length !== 0) {
       throw new Error(`窄屏布局不对：${JSON.stringify({ ...stacked, switchingControls })}`);
+    }
+
+    // Stacked panes have independent scroll ranges, so the sync must stay off.
+    const narrowScroll = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const writing = document.querySelector(".writing-host .cm-scroller");
+        const preview = document.querySelector('[data-region="preview"]');
+        if (!writing || !preview) return null;
+        const writingMax = Math.max(0, writing.scrollHeight - writing.clientHeight);
+        const previewBefore = preview.scrollTop;
+        writing.scrollTop = Math.round(writingMax * 0.15);
+        return {
+          writingMax,
+          previewBefore,
+          wide: window.matchMedia("(min-width: 900px)").matches,
+        };
+      })()`,
+    );
+    if (!narrowScroll || narrowScroll.wide || narrowScroll.writingMax <= 0) {
+      throw new Error(`窄屏滚动前提不成立：${JSON.stringify(narrowScroll)}`);
+    }
+    await sleep(300);
+    const narrowPreview = await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('[data-region="preview"]')?.scrollTop ?? 0`,
+    );
+    if (Math.abs(narrowPreview - narrowScroll.previewBefore) > 1.5) {
+      throw new Error(
+        `窄屏堆叠后仍在联动滚动：${JSON.stringify({
+          before: narrowScroll.previewBefore,
+          after: narrowPreview,
+        })}`,
+      );
     }
     await cdp.send("Emulation.clearDeviceMetricsOverride", {}, sessionId);
 
@@ -1851,7 +1993,13 @@ async function main() {
     console.log(
       `  键入后预览：${typedPreview.heading}，${typedPreview.characters} 字，${typedPreview.pages} 页`,
     );
+    console.log(
+      `  联动滚动：写作面 ${Math.round(followedPreview.sourceTop)}px / ${followedPreview.sourceMax}px → 预览 ${Math.round(followedPreview.targetTop)}px；预览 ${Math.round(followedWriting.sourceTop)}px / ${followedWriting.sourceMax}px → 写作面 ${Math.round(followedWriting.targetTop)}px`,
+    );
     console.log(`  窄屏：写作面在上、预览在下，分隔条隐藏（${stacked.columns} 列）`);
+    console.log(
+      `  窄屏滚动不同步：预览保持 ${Math.round(narrowScroll.previewBefore)}px（实测 ${Math.round(narrowPreview)}px）`,
+    );
     console.log("  中文标题、表格、任务列表、代码块与长链接换行均已投影");
     console.log("  Ctrl+S 写回、Ctrl+Shift+S 另存、Ctrl+O 打开、Ctrl+Shift+E 导出、拖入 Markdown 均通过");
     console.log(
