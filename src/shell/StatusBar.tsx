@@ -17,6 +17,7 @@ type StatusBarProps = {
 
 const SAVE_LABEL: Record<SaveState, string> = {
   idle: "未保存",
+  draft: "草稿",
   saved: "已保存",
   dirty: "未保存",
   error: "保存失败，请重试",

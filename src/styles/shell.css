@@ -619,6 +619,10 @@ body.is-resizing {
   background: var(--moye-color-success);
 }
 
+.statusbar__dot[data-state="draft"] {
+  background: var(--moye-color-text-tertiary);
+}
+
 .statusbar__dot[data-state="dirty"] {
   background: var(--moye-color-warning);
 }

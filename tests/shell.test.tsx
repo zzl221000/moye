@@ -118,6 +118,15 @@ describe("墨页 shell", () => {
     expect(status?.textContent).toContain("≈0 页");
   });
 
+  it("restores a draft as a draft, not as a saved file", () => {
+    seedDraft("# 草稿\n", "恢复.md");
+    const root = mount();
+    const status = root.querySelector(".statusbar");
+
+    expect(status?.textContent).toContain("草稿");
+    expect(status?.textContent).not.toContain("已保存");
+  });
+
   it("shows first-page bands from the resolved header and page number", async () => {
     seedDraft(mixedMarkdown, "bands.md");
     localStorage.setItem(

@@ -39,7 +39,7 @@ import {
 } from "./insert";
 import { SAMPLE_MARKDOWN } from "./sample";
 
-export type SaveState = "idle" | "saved" | "dirty" | "error";
+export type SaveState = "idle" | "draft" | "saved" | "dirty" | "error";
 
 export interface WritingState {
   /** Display name of the current document. */
@@ -145,7 +145,8 @@ export class WritingSession {
       if (this.mount(content)) {
         this.name = normalizeFileName(draft.name);
         this.markdown = content;
-        this.saveState = "saved";
+        // A restored draft is local-only; nothing was written to a file yet.
+        this.saveState = "draft";
         this.hasDocument = true;
       }
     }

@@ -54,7 +54,7 @@ function initialWritingState(): WritingState {
   if (!draft) return INITIAL_STATE;
   return {
     name: draft.name,
-    saveState: "saved",
+    saveState: "draft",
     markdown: draft.content,
     hasDocument: true,
   };
