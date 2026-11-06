@@ -1,6 +1,6 @@
 # 墨页 · Markdown → PDF
 
-本地优先的 Markdown 写作面与 PDF 导出工具。写作面是 QuireKit MSFE 的 live 呈现，右侧版式预览与导出共用同一份渲染结果，PDF 由 dompdf.js 在浏览器内生成。
+本地优先的 Markdown 写作面与 PDF 导出工具。写作面是 QuireKit MSFE 的 live 呈现，右侧版式预览与导出共用同一份渲染结果，PDF 由 dompdf.js 在浏览器内完成导出。
 
 运行时不访问网络：应用、字体、Markdown 解析器与 PDF 内核都是同源静态资源，文档内容不离开本机。只有 Markdown 里显式写出的远程图片会按原 URL 请求。
 
@@ -51,9 +51,9 @@ bun run smoke:writing   # 写作面冒烟，需要 Chrome/Edge
 
 ## 使用
 
-打开：顶栏「打开」、`Ctrl/⌘ O`，或把 `.md` 文件拖进窗口。保存：`Ctrl/⌘ S` 写回原文件，`Ctrl/⌘ ⇧ S` 另存。导出：顶栏「导出 PDF」。
+打开：顶栏「打开」、`Ctrl/⌘ O`，或把 `.md` 文件拖进窗口。保存：`Ctrl/⌘ S` 写回原文件，`Ctrl/⌘ ⇧ S` 另存。导出：顶栏「导出 PDF」或 `Ctrl/⌘ ⇧ E`。顶栏文件名可直接编辑，导出的 PDF 使用该名称。
 
-设置分三组：纸张（纸张、页边距）、版式（页眉标题、页脚页码、首页不显示页眉页脚、一级标题另起页）、文档（文档主题、页面背景、细节 CSS、压缩 PDF 体积）。
+设置分三组：纸张（纸张、页边距）、版式（页眉标题、页脚页码、首页不显示页眉页脚、一级标题另起页）、文档（文档主题、页面背景、压缩 PDF 体积）；细节 CSS 收在文档组的「高级」折叠里。
 
 Chrome / Edge 在 HTTPS 或 localhost 下通过 File System Access API 写回原文件；Firefox / Safari 降级为下载副本。文件句柄只在当前会话有效，刷新后需要重新打开文件；草稿自动保存在 localStorage。
 
@@ -81,7 +81,7 @@ node export.mjs 报告.md --theme dark --css my.css --background '#0d1117'
 | `--no-cover` | 首页也显示页眉页脚 |
 | `--h1-break` | 每个一级标题另起一页 |
 | `--no-compress` | 不压缩 PDF 流 |
-| `--open` | 生成后用默认阅读器打开 |
+| `--open` | 导出后用默认阅读器打开 |
 
 CLI 起一个临时 HTTP 服务，用 headless Chrome 打开导出页，再调用 dompdf.js 把 base64 PDF 写回磁盘。需要 **Node 22+**；找不到 Chrome 时设置 `CHROME_PATH`（Edge 也可以）。Markdown 里的相对图片路径按 `.md` 所在目录解析。
 

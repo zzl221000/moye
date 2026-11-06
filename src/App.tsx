@@ -96,10 +96,11 @@ export default function App() {
   );
   const previewBackground = () =>
     options().background || previewDocument().background;
+  const previewHeaderTitle = createMemo(
+    () => options().headerTitle.trim() || previewDocument().title,
+  );
   const hasPageBands = createMemo(
-    () =>
-      Boolean(options().headerTitle.trim() || previewDocument().title) ||
-      options().pageNumbers,
+    () => Boolean(previewHeaderTitle()) || options().pageNumbers,
   );
   const previewPageHeight = createMemo(() =>
     pageContentHeight(previewPaper(), hasPageBands()),
@@ -109,6 +110,7 @@ export default function App() {
   const [resizing, setResizing] = createSignal(false);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [exporting, setExporting] = createSignal(false);
+  const [exportProgress, setExportProgress] = createSignal<number | null>(null);
   const [exportError, setExportError] = createSignal<string | null>(null);
 
   let session: WritingSession | null = null;
@@ -192,6 +194,7 @@ export default function App() {
   async function handleExport(): Promise<void> {
     if (exporting() || !docState().hasDocument) return;
     setExporting(true);
+    setExportProgress(null);
     setExportError(null);
     try {
       // Export the newest Markdown, not the possibly debounced preview, so a
@@ -203,13 +206,29 @@ export default function App() {
       );
       await exportDocumentToPdf(
         document,
-        exportSettingsFor(options(), document),
+        exportSettingsFor(options(), document, docState().name),
+        (progress) => {
+          if (progress.stage === "done") {
+            setExportProgress(1);
+            return;
+          }
+          if (
+            typeof progress.currentPage === "number" &&
+            typeof progress.totalPages === "number" &&
+            progress.totalPages > 0
+          ) {
+            setExportProgress(
+              Math.min(1, Math.max(0, progress.currentPage / progress.totalPages)),
+            );
+          }
+        },
       );
     } catch (error) {
       console.error(error);
       setExportError(EXPORT_FAILURE_MESSAGE);
     } finally {
       setExporting(false);
+      setExportProgress(null);
     }
   }
 
@@ -217,7 +236,7 @@ export default function App() {
     const hook: MoyeSettingsHook = {
       getOptions: () => ({ ...options() }),
       getExportSettings: () =>
-        exportSettingsFor(options(), previewDocument()),
+        exportSettingsFor(options(), previewDocument(), docState().name),
     };
     window.__moyeSettings = hook;
     onCleanup(() => {
@@ -239,6 +258,9 @@ export default function App() {
           onSave={() => {
             void session?.save();
           }}
+          onRename={(name) => {
+            session?.rename(name);
+          }}
           onExport={() => void handleExport()}
           onSettings={() => setSettingsOpen(true)}
           onSettingsButton={(button) => {
@@ -246,7 +268,7 @@ export default function App() {
           }}
           settingsOpen={settingsOpen()}
           exporting={exporting()}
-          exportError={exportError()}
+          exportProgress={exportProgress()}
         />
 
         <main
@@ -265,6 +287,7 @@ export default function App() {
             onReady={(created) => {
               session = created;
             }}
+            onExport={() => void handleExport()}
           />
 
           <div
@@ -323,6 +346,9 @@ export default function App() {
             background={previewBackground()}
             pageContentHeightPx={previewPageHeight()}
             h1Break={options().pageBreakOnH1}
+            headerTitle={previewHeaderTitle()}
+            pageNumbers={options().pageNumbers}
+            cover={options().cover}
             onPageEstimate={(count) => setPages(count)}
           />
         </main>
@@ -332,6 +358,7 @@ export default function App() {
           characters={countCharacters(docState().markdown)}
           pages={pages()}
           saveState={docState().saveState}
+          exportError={exportError()}
         />
 
         <SettingsPanel

@@ -9,6 +9,7 @@ export interface WritingPaneProps {
   readonly hasDocument: boolean;
   readonly onState: (state: WritingState) => void;
   readonly onReady: (session: WritingSession | null) => void;
+  readonly onExport: () => void;
 }
 
 export default function WritingPane(props: WritingPaneProps) {
@@ -21,6 +22,7 @@ export default function WritingPane(props: WritingPaneProps) {
     const created = new WritingSession({
       host: parent,
       onState: props.onState,
+      onExport: props.onExport,
     });
     session = created;
     props.onReady(created);

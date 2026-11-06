@@ -60,6 +60,8 @@ export type DocumentExportSettings = {
   readonly pageBreakOnH1: boolean;
   readonly compress: boolean;
   readonly background: string;
+  /** Normalized document name; names the downloaded PDF. Not sent to dompdf. */
+  readonly fileName: string;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -255,6 +257,7 @@ export function renderOptionsFor(
 export function exportSettingsFor(
   options: DocumentOptions,
   document: ExportDocument,
+  fileName = "",
 ): DocumentExportSettings {
   return {
     paper: options.paper,
@@ -265,5 +268,6 @@ export function exportSettingsFor(
     pageBreakOnH1: options.pageBreakOnH1,
     compress: options.compress,
     background: options.background || document.background,
+    fileName,
   };
 }

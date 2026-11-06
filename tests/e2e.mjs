@@ -24,6 +24,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "..");
 const distDir = path.join(repoRoot, "dist");
+const fixtureAssetsDir = path.join(__dirname, "fixtures", "assets");
 const goldenPath = path.join(__dirname, "golden", "mixed.json");
 const PAGES_BASE = "/moye/";
 
@@ -80,6 +81,9 @@ function requireEnvironment() {
   if (!fs.existsSync(path.join(distDir, "index.html"))) {
     throw new EnvironmentError("dist/index.html 不存在；先运行 bun run build。");
   }
+  if (fs.existsSync(path.join(distDir, "assets", "block.png"))) {
+    throw new EnvironmentError("生产构建包含 fixture 图片 assets/block.png。");
+  }
   if (!fs.existsSync(goldenPath)) {
     throw new EnvironmentError(`缺少黄金值：${path.relative(repoRoot, goldenPath)}`);
   }
@@ -107,6 +111,11 @@ function requireEnvironment() {
   const mixedMarkdown = fs.readFileSync(mixedPath, "utf8");
   if (mixedMarkdown.trim() === "") {
     throw new EnvironmentError(`fixture 为空：${path.relative(repoRoot, mixedPath)}`);
+  }
+  if (!fs.existsSync(path.join(fixtureAssetsDir, "block.png"))) {
+    throw new EnvironmentError(
+      `缺少 fixture 图片：${path.relative(repoRoot, path.join(fixtureAssetsDir, "block.png"))}`,
+    );
   }
 
   return {
@@ -192,13 +201,32 @@ function startServer() {
     let relative = pathname.slice(PAGES_BASE.length);
     if (relative === "" || relative.endsWith("/")) relative += "index.html";
 
-    const filePath = path.resolve(distDir, relative);
-    if (filePath !== distDir && !filePath.startsWith(distDir + path.sep)) {
-      response.writeHead(403).end("forbidden");
-      return;
+    // Fixture images are test inputs, not part of the production build. The
+    // harness serves them here so the preview can resolve `assets/block.png`
+    // without leaking fixtures into `dist/`. Vite's own bundle also lives under
+    // `/assets/`, so only an existing fixture file takes the detour.
+    let target = null;
+    if (relative.startsWith("assets/")) {
+      const fixtureTarget = path.resolve(
+        fixtureAssetsDir,
+        relative.slice("assets/".length),
+      );
+      if (
+        fixtureTarget.startsWith(fixtureAssetsDir + path.sep) &&
+        fs.existsSync(fixtureTarget) &&
+        fs.statSync(fixtureTarget).isFile()
+      ) {
+        target = fixtureTarget;
+      }
+    }
+    if (!target) {
+      target = path.resolve(distDir, relative);
+      if (target !== distDir && !target.startsWith(distDir + path.sep)) {
+        response.writeHead(403).end("forbidden");
+        return;
+      }
     }
 
-    let target = filePath;
     try {
       if (fs.statSync(target).isDirectory()) target = path.join(target, "index.html");
       if (!fs.statSync(target).isFile()) throw new Error("not a file");
@@ -521,7 +549,24 @@ async function main() {
       },
       30_000,
       "应用加载",
-      () => (pageErrors.length ? `页面错误：\n${pageErrors.join("\n")}` : ""),
+      async () => {
+        if (pageErrors.length) return `页面错误：\n${pageErrors.join("\n")}`;
+        try {
+          return await evaluate(
+            cdp,
+            sessionId,
+            `JSON.stringify({
+              ready: document.readyState,
+              shell: Boolean(document.querySelector(".app-shell")),
+              text: document.body.textContent?.slice(0, 240) ?? "",
+              root: document.getElementById("root")?.innerHTML.slice(0, 240) ?? "",
+              scripts: [...document.scripts].map((script) => script.src),
+            })`,
+          );
+        } catch (error) {
+          return `无法读取页面状态：${String(error)}`;
+        }
+      },
     );
 
     // The preview follows the current document, so the export check first has

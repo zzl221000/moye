@@ -288,6 +288,13 @@ describe("options mapping", () => {
     expect(settings.headerTitle).toBe("内部评审");
   });
 
+  it("carries the normalized document name into export settings", () => {
+    const document = renderExportDocument(multiH1Markdown);
+    const settings = exportSettingsFor(options(), document, "季度报告.md");
+
+    expect(settings.fileName).toBe("季度报告.md");
+  });
+
   it("maps paper, layout and document settings to the frozen export options", () => {
     const document = renderExportDocument(simpleMarkdown);
     const settings = exportSettingsFor(
@@ -313,6 +320,7 @@ describe("options mapping", () => {
       pageBreakOnH1: true,
       compress: false,
       background: "#0d1117",
+      fileName: "",
     });
   });
 

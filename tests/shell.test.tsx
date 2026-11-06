@@ -55,15 +55,43 @@ describe("墨页 shell", () => {
     expect(name).toBeInstanceOf(HTMLInputElement);
     if (name instanceof HTMLInputElement) {
       expect(name.value).toBe("未命名.md");
-      expect(name.readOnly).toBe(true);
+      expect(name.readOnly).toBe(false);
     }
 
     expect(root.querySelectorAll(".topbar__actions button")).toHaveLength(4);
     expect(root.querySelector(".topbar")?.textContent).toContain("墨页");
+    expect(
+      root.querySelector('button[aria-label="打开"]')?.getAttribute("title"),
+    ).toContain("Ctrl/⌘ O");
+    expect(
+      root.querySelector('button[aria-label="导出 PDF"]')?.getAttribute("title"),
+    ).toContain("Ctrl/⌘ ⇧ E");
 
     const exportButton = root.querySelector('[data-action="export"]');
     expect(exportButton).toBeInstanceOf(HTMLButtonElement);
     expect(exportButton?.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("renames the document through the writing session", async () => {
+    seedDraft("# 文档\n", "初始.md");
+    const root = mount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const name = root.querySelector<HTMLInputElement>(".doc-name");
+
+    expect(name).not.toBeNull();
+    if (!name) return;
+    name.value = "季度报告";
+    name.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(name.value).toBe("季度报告.md");
+    expect(root.querySelector(".statusbar")?.textContent).toContain(
+      "季度报告.md",
+    );
+    expect(
+      JSON.parse(localStorage.getItem("moye.draft.v1") ?? "{}"),
+    ).toMatchObject({ name: "季度报告.md" });
   });
 
   it("opens on an empty writing surface with exactly two actions", () => {
@@ -87,7 +115,43 @@ describe("墨页 shell", () => {
     expect(status?.textContent).toContain("未保存");
     expect(status?.textContent).toContain("未命名.md");
     expect(status?.textContent).toContain("0 字");
-    expect(status?.textContent).toContain("0 页");
+    expect(status?.textContent).toContain("≈0 页");
+  });
+
+  it("shows first-page bands from the resolved header and page number", async () => {
+    seedDraft(mixedMarkdown, "bands.md");
+    localStorage.setItem(
+      OPTIONS_STORAGE_KEY,
+      JSON.stringify({
+        paper: "a4",
+        margin: "36",
+        title: "",
+        footer: true,
+        cover: false,
+        h1Break: false,
+        theme: "paper",
+        background: "#ffffff",
+        css: "",
+      }),
+    );
+    const root = mount();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(
+      root.querySelector('[data-preview-band="header"]')?.textContent?.trim(),
+    ).toBe("混合结构基线");
+    expect(
+      root.querySelector('[data-preview-band="footer"]')?.textContent?.trim(),
+    ).toBe("第 1 页");
+
+    const cover = root.querySelector<HTMLInputElement>("#setting-cover");
+    if (!cover) throw new Error("missing cover control");
+    cover.checked = true;
+    cover.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(root.querySelector('[data-preview-band="header"]')).toBeNull();
+    expect(root.querySelector('[data-preview-band="footer"]')).toBeNull();
   });
 
   it("shows an A4-shaped paper in the preview pane", () => {

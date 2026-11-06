@@ -203,6 +203,41 @@ button {
   gap: var(--moye-space-inline-tight);
 }
 
+/* A thin, purely visual echo of dompdf's own progress callbacks. The bar sits
+   on the top bar's border so it never changes the shell's layout. */
+.export-progress {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+  background: var(--moye-color-action-soft);
+}
+
+.export-progress__bar {
+  display: block;
+  height: 100%;
+  background: var(--moye-color-action-primary);
+  transition: width var(--moye-motion-duration-feedback) linear;
+}
+
+.export-progress[data-indeterminate="true"] .export-progress__bar {
+  width: 35%;
+  animation: moye-export-progress 1.1s var(--moye-motion-easing-standard)
+    infinite;
+}
+
+@keyframes moye-export-progress {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(300%);
+  }
+}
+
 /* --- buttons ------------------------------------------------------------- */
 
 .btn {
@@ -461,7 +496,9 @@ body.is-resizing {
    every line break identical to the PDF while fitting the pane. */
 .preview-paper {
   position: relative;
+  display: flex;
   flex: none;
+  flex-direction: column;
   width: var(--moye-preview-paper-width);
   min-height: var(--moye-preview-paper-height);
   padding: var(--moye-preview-paper-margin);
@@ -472,7 +509,32 @@ body.is-resizing {
 }
 
 .preview-paper__content {
+  flex: none;
   min-width: 0;
+}
+
+/* First-page bands only: the preview is still one continuous sheet, so these
+   mirror the export's header/footer instead of trying to paginate. */
+.preview-paper__band {
+  display: flex;
+  flex: none;
+  align-items: center;
+  overflow: hidden;
+  font-family: "SourceHanSansSC-Regular", "Noto Sans SC", "PingFang SC",
+    "Microsoft YaHei", "Segoe UI", sans-serif;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.preview-paper__band--header {
+  justify-content: flex-start;
+  font-size: 10px;
+}
+
+.preview-paper__band--footer {
+  justify-content: center;
+  margin-top: auto;
+  font-size: 9px;
 }
 
 /* A forced page break is the one pagination rule that is already known before
@@ -561,6 +623,16 @@ body.is-resizing {
   max-width: 36vw;
   overflow: hidden;
   color: var(--moye-color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar__error {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--moye-color-danger);
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
