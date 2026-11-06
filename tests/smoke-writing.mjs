@@ -1211,6 +1211,43 @@ async function main() {
       throw new Error(`长文档重新分页超过 300ms：${longTiming.ms}ms`);
     }
 
+    // Virtualization: every page keeps its card, but only cards near the
+    // viewport carry the document HTML. Shell cards must stay empty so the
+    // stack height — and with it, every page offset — stays exact. Scrolling
+    // to the top makes the visible range deterministic on the 5-page fixture.
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.getElementById("preview-pane").scrollTop = 0`,
+    );
+    const virtualized = await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const cards = [...document.querySelectorAll("[data-preview-page]")];
+            return {
+              cards: cards.length,
+              rendered: cards.filter(
+                (card) => card.getAttribute("data-preview-rendered") === "true",
+              ).length,
+              filled: cards.filter(
+                (card) => card.querySelector(".preview-paper__content"),
+              ).length,
+            };
+          })()`,
+        );
+        return state.rendered > 0 &&
+          state.rendered < state.cards &&
+          state.filled === state.rendered
+          ? state
+          : null;
+      },
+      5_000,
+      "预览只渲染可见页",
+    );
+
     // Synced scrolling: scrolling either pane moves the other by the fraction
     // of its scroll range, with no visible control.
     const scrollGeometry = await waitFor(
@@ -2591,6 +2628,9 @@ async function main() {
     );
     console.log(
       `  长文档重新分页：${longTiming.pageCount} 页，snapshot ${longTiming.ms}ms`,
+    );
+    console.log(
+      `  页面虚拟化：${virtualized.rendered} / ${virtualized.cards} 页挂载内容，其余为空壳`,
     );
     console.log(
       `  回退：${fallbackState.mode}，连续预览 ${fallbackState.continuous}，估算页数 ${fallbackState.approximate}`,

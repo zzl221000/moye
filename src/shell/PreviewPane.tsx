@@ -31,15 +31,31 @@ type PreviewPaneProps = {
 };
 
 /**
+ * How far past the viewport a page is kept rendered. One viewport of lead
+ * makes scrolling land on content that is already painted.
+ */
+export const PAGE_RENDER_MARGIN = "100% 0px";
+
+/** Projection links stay out of the tab order even when mounted later. */
+function silenceLinks(root: ParentNode): void {
+  for (const link of root.querySelectorAll<HTMLElement>("a[href]")) {
+    link.tabIndex = -1;
+  }
+}
+
+/**
  * 版式预览: one A4 card per page measured by dompdf's snapshot pass.
  *
- * Every card contains the same export HTML, translated by that page's start
- * offset and clipped to its slice. The document is never re-rendered per page:
- * line breaking and pagination stay in dompdf, and the preview only slices the
- * flow it measured. When the snapshot API is unavailable the pane keeps its
- * old continuous sheet and reports an estimated count with `≈`.
+ * Every page keeps its card, but only cards near the viewport contain the
+ * export HTML, translated by that page's start offset and clipped to its
+ * slice; the rest stay empty shells with the same height. The document is
+ * never re-rendered per page: line breaking and pagination stay in dompdf,
+ * and the preview only slices the flow it measured. When the snapshot API is
+ * unavailable the pane keeps its old continuous sheet and reports an
+ * estimated count with `≈`.
  */
 export default function PreviewPane(props: PreviewPaneProps) {
+  const [pane, setPane] = createSignal<HTMLElement>();
   const [stack, setStack] = createSignal<HTMLDivElement>();
   const [continuousContent, setContinuousContent] =
     createSignal<HTMLDivElement>();
@@ -47,6 +63,13 @@ export default function PreviewPane(props: PreviewPaneProps) {
   const [pages, setPages] = createSignal<PreviewPagination | null>(null);
   const [pending, setPending] = createSignal(true);
   const [continuousEstimate, setContinuousEstimate] = createSignal(0);
+  /**
+   * Page numbers whose slice is currently in the DOM. `null` means "keep every
+   * page": no pagination yet, or no IntersectionObserver to track visibility.
+   */
+  const [renderedPages, setRenderedPages] = createSignal<ReadonlySet<
+    number
+  > | null>(new Set<number>());
 
   let sequence = 0;
   let initialized = false;
@@ -117,6 +140,55 @@ export default function PreviewPane(props: PreviewPaneProps) {
     },
   );
 
+  // Only pages near the viewport carry the exported HTML. Every other page
+  // keeps its card and reserved-band geometry as an empty shell, so the stack
+  // height and scroll mapping stay identical while long documents mount a
+  // handful of copies instead of one per page.
+  createEffect(
+    () => ({ pane: pane(), stack: stack(), pagination: pages() }),
+    ({ pane, stack, pagination }) => {
+      if (!pagination || !stack) return;
+      if (typeof IntersectionObserver === "undefined") {
+        setRenderedPages(null);
+        return;
+      }
+
+      let cancelled = false;
+      const observer = new IntersectionObserver(
+        (entries) => {
+          setRenderedPages((current) => {
+            const next = new Set(current ?? []);
+            for (const entry of entries) {
+              const page = Number(
+                (entry.target as HTMLElement).dataset.previewPage,
+              );
+              if (!Number.isInteger(page)) continue;
+              if (entry.isIntersecting) next.add(page);
+              else next.delete(page);
+            }
+            return next;
+          });
+        },
+        { root: pane ?? null, rootMargin: PAGE_RENDER_MARGIN },
+      );
+
+      // The For block renders in the same flush; observe once it is in the DOM.
+      queueMicrotask(() => {
+        if (cancelled) return;
+        for (const card of stack.querySelectorAll<HTMLElement>(
+          "[data-preview-page]",
+        )) {
+          observer.observe(card);
+        }
+      });
+
+      return () => {
+        cancelled = true;
+        observer.disconnect();
+      };
+    },
+  );
+
   // The preview is a visual projection: its content is aria-hidden, so links
   // inside it must stay out of the tab order instead of being focusable but
   // invisible to assistive technology.
@@ -124,11 +196,7 @@ export default function PreviewPane(props: PreviewPaneProps) {
     () => ({ element: stack(), document: props.document, pages: pages() }),
     ({ element }) => {
       if (!element) return;
-      queueMicrotask(() => {
-        for (const link of element.querySelectorAll<HTMLElement>("a[href]")) {
-          link.tabIndex = -1;
-        }
-      });
+      queueMicrotask(() => silenceLinks(element));
     },
   );
 
@@ -192,6 +260,7 @@ export default function PreviewPane(props: PreviewPaneProps) {
     <section
       id="preview-pane"
       class="preview-pane"
+      ref={(element) => setPane(element)}
       data-region="preview"
       data-pagination-state={state()}
       data-page-count={pages()?.pageCount}
@@ -274,11 +343,16 @@ export default function PreviewPane(props: PreviewPaneProps) {
                 };
                 const showBands = (): boolean =>
                   !props.cover || pageNumber() > 1;
+                const rendered = (): boolean => {
+                  const active = renderedPages();
+                  return active === null || active.has(pageNumber());
+                };
 
                 return (
                   <article
                     class="preview-paper preview-paper--page"
                     data-preview-page={pageNumber()}
+                    data-preview-rendered={rendered() ? "true" : "false"}
                     data-h1-break={props.h1Break ? "true" : undefined}
                     aria-label={`第 ${pageNumber()} 页`}
                     style={{
@@ -308,20 +382,25 @@ export default function PreviewPane(props: PreviewPaneProps) {
                       class="preview-page__viewport"
                       style={{ height: `${pagination().contentHeightPx}px` }}
                     >
-                      <div
-                        class="preview-page__slice"
-                        style={{ height: `${visibleHeight()}px` }}
-                      >
+                      <Show when={rendered()}>
                         <div
-                          class="preview-paper__content"
-                          aria-hidden="true"
-                          style={{
-                            width: `${props.paper.contentWidthPx}px`,
-                            transform: `translateY(${topBlank() - start}px)`,
-                          }}
-                          innerHTML={props.document.html}
-                        />
-                      </div>
+                          class="preview-page__slice"
+                          style={{ height: `${visibleHeight()}px` }}
+                        >
+                          <div
+                            class="preview-paper__content"
+                            aria-hidden="true"
+                            style={{
+                              width: `${props.paper.contentWidthPx}px`,
+                              transform: `translateY(${topBlank() - start}px)`,
+                            }}
+                            innerHTML={props.document.html}
+                            ref={(element) => {
+                              queueMicrotask(() => silenceLinks(element));
+                            }}
+                          />
+                        </div>
+                      </Show>
                     </div>
 
                     <div
