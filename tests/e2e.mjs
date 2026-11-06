@@ -31,8 +31,13 @@ const PAGES_BASE = "/moye/";
 const argv = process.argv.slice(2);
 const keep = argv.includes("--keep");
 const ci = argv.includes("--ci");
+const pagination = argv.includes("--pagination");
 const unknownFlags = argv.filter(
-  (argument) => argument.startsWith("-") && argument !== "--keep" && argument !== "--ci",
+  (argument) =>
+    argument.startsWith("-") &&
+    argument !== "--keep" &&
+    argument !== "--ci" &&
+    argument !== "--pagination",
 );
 
 /**
@@ -76,7 +81,7 @@ class EnvironmentError extends Error {}
 
 function requireEnvironment() {
   if (unknownFlags.length > 0) {
-    throw new EnvironmentError(`未知参数：${unknownFlags.join(" ")}（可用：--keep、--ci）`);
+    throw new EnvironmentError(`未知参数：${unknownFlags.join(" ")}（可用：--keep、--ci、--pagination）`);
   }
   if (!fs.existsSync(path.join(distDir, "index.html"))) {
     throw new EnvironmentError("dist/index.html 不存在；先运行 bun run build。");
@@ -490,6 +495,366 @@ function reportPageDifference(expected, actual, page) {
   return `  p${page} | 页数不同`;
 }
 
+/* ------------------------------------------------------- pagination suite */
+
+const PAGINATION_CASES = [
+  {
+    fixture: "simple",
+    label: "simple",
+    cover: true,
+    footer: true,
+    header: "会议纪要",
+  },
+  {
+    fixture: "mixed",
+    label: "mixed",
+    cover: true,
+    footer: true,
+    header: "混合结构基线",
+  },
+  {
+    fixture: "long",
+    label: "long",
+    cover: true,
+    footer: true,
+    header: "长文档基线",
+  },
+  {
+    fixture: "multi-h1",
+    label: "multi-h1",
+    cover: true,
+    footer: true,
+    header: "第一章 起点",
+  },
+  {
+    fixture: "multi-h1",
+    label: "multi-h1-break",
+    cover: false,
+    footer: true,
+    header: "第一章 起点",
+    options: {
+      paper: "a4",
+      margin: "36",
+      title: "",
+      footer: true,
+      cover: false,
+      h1Break: true,
+      theme: "paper",
+      background: "#ffffff",
+      css: "",
+    },
+  },
+  {
+    fixture: "mixed",
+    label: "mixed-landscape",
+    cover: true,
+    footer: true,
+    header: "自定义页眉",
+    options: {
+      paper: "a4-landscape",
+      margin: "0",
+      title: "自定义页眉",
+      footer: true,
+      cover: true,
+      h1Break: false,
+      theme: "paper",
+      background: "#ffffff",
+      css: "",
+    },
+  },
+  {
+    fixture: "mixed",
+    label: "mixed-letter",
+    cover: false,
+    footer: true,
+    header: "混合结构基线",
+    options: {
+      paper: "letter",
+      margin: "18",
+      title: "",
+      footer: true,
+      cover: false,
+      h1Break: false,
+      theme: "paper",
+      background: "#ffffff",
+      css: "",
+    },
+  },
+  {
+    fixture: "mixed",
+    label: "mixed-nofooter",
+    cover: false,
+    footer: false,
+    header: "混合结构基线",
+    options: {
+      paper: "a4",
+      margin: "36",
+      title: "",
+      footer: false,
+      cover: false,
+      h1Break: false,
+      theme: "paper",
+      background: "#ffffff",
+      css: "",
+    },
+  },
+];
+
+const PAGE_STATE_EXPRESSION = `(() => {
+  const pane = document.getElementById("preview-pane");
+  const cards = [...document.querySelectorAll("[data-preview-page]")];
+  return {
+    state: pane?.getAttribute("data-pagination-state") ?? "",
+    count: Number(pane?.getAttribute("data-page-count") ?? 0),
+    cards: cards.length,
+    ms: Number(pane?.getAttribute("data-pagination-ms") ?? 0),
+    name: document.querySelector(".doc-name")?.value ?? "",
+    status: document.querySelector(".statusbar")?.textContent ?? "",
+    bands: cards.map((card, index) => ({
+      page: index + 1,
+      count: card.querySelectorAll("[data-preview-band]").length,
+      header:
+        card.querySelector('[data-preview-band="header"]')?.textContent?.trim() ?? "",
+      footer:
+        card.querySelector('[data-preview-band="footer"]')?.textContent?.trim() ?? "",
+    })),
+  };
+})()`;
+
+async function waitForExactPreview(cdp, sessionId, name, label) {
+  return waitFor(
+    async () => {
+      try {
+        const state = await evaluate(cdp, sessionId, PAGE_STATE_EXPRESSION);
+        return state.state === "exact" &&
+          state.count > 0 &&
+          state.cards === state.count &&
+          state.name === `${name}.md`
+          ? state
+          : null;
+      } catch {
+        return null;
+      }
+    },
+    60_000,
+    `${label} 分页预览`,
+  );
+}
+
+/**
+ * Compares the preview's measured page count with a real PDF export for every
+ * fixture, plus paper/margin/header/footer/cover/H1-break variants. Each case
+ * runs in a fresh browser context so the previous draft cannot leak in.
+ */
+async function runPaginationSuite({ cdp, url, pdfinfo, pdftotext }) {
+  const results = [];
+  let maxMs = 0;
+
+  for (const testCase of PAGINATION_CASES) {
+    const fixturePath = path.join(__dirname, "fixtures", `${testCase.fixture}.md`);
+    const markdown = fs.readFileSync(fixturePath, "utf8");
+    const downloadDir = fs.mkdtempSync(path.join(os.tmpdir(), "moye-pages-"));
+    const { browserContextId } = await cdp.send("Target.createBrowserContext");
+    const pageErrors = [];
+    let targetId = null;
+
+    try {
+      await cdp.send("Browser.setDownloadBehavior", {
+        behavior: "allow",
+        browserContextId,
+        downloadPath: downloadDir,
+        eventsEnabled: false,
+      });
+
+      const created = await cdp.send("Target.createTarget", {
+        url,
+        browserContextId,
+      });
+      targetId = created.targetId;
+      const attached = await cdp.send("Target.attachToTarget", {
+        targetId,
+        flatten: true,
+      });
+      const sessionId = attached.sessionId;
+      await cdp.send("Runtime.enable", {}, sessionId);
+      cdp.on("Runtime.exceptionThrown", (params, eventSession) => {
+        if (eventSession !== sessionId) return;
+        pageErrors.push(
+          params.exceptionDetails?.exception?.description ??
+            params.exceptionDetails?.text ??
+            "页面异常",
+        );
+      });
+      cdp.on("Runtime.consoleAPICalled", (params, eventSession) => {
+        if (eventSession !== sessionId || params.type !== "error") return;
+        pageErrors.push(
+          (params.args ?? [])
+            .map((argument) => String(argument.value ?? argument.description ?? ""))
+            .join(" "),
+        );
+      });
+
+      await waitFor(
+        async () =>
+          evaluate(
+            cdp,
+            sessionId,
+            `Boolean(document.querySelector(".app-shell"))`,
+          ),
+        30_000,
+        `${testCase.label} 应用加载`,
+      );
+
+      const draft = JSON.stringify({
+        name: `${testCase.label}.md`,
+        content: markdown,
+        at: Date.now(),
+      });
+      await evaluate(
+        cdp,
+        sessionId,
+        `localStorage.setItem("moye.draft.v1", ${JSON.stringify(draft)})`,
+      );
+      if (testCase.options) {
+        await evaluate(
+          cdp,
+          sessionId,
+          `localStorage.setItem("moye.options.v1", ${JSON.stringify(
+            JSON.stringify(testCase.options),
+          )})`,
+        );
+      }
+
+      await cdp.send("Page.enable", {}, sessionId);
+      await cdp.send("Page.reload", { ignoreCache: true }, sessionId);
+
+      const preview = await waitForExactPreview(
+        cdp,
+        sessionId,
+        testCase.label,
+        testCase.label,
+      );
+
+      if (preview.status.includes("≈")) {
+        throw new Error(
+          `${testCase.label} 状态栏仍是估算页数：${preview.status}`,
+        );
+      }
+      if (!preview.status.includes(`${preview.count} 页`)) {
+        throw new Error(
+          `${testCase.label} 状态栏没有显示精确页数：${preview.status}`,
+        );
+      }
+
+      const bandPages = testCase.footer ? 2 : 1;
+      for (const band of preview.bands) {
+        const expected = band.page === 1 && testCase.cover ? 0 : bandPages;
+        if (band.count !== expected) {
+          throw new Error(
+            `${testCase.label} 第 ${band.page} 页页眉页脚数量：期望 ${expected}，实际 ${band.count}`,
+          );
+        }
+        if (band.page === 1 && testCase.cover) continue;
+        if (band.header !== testCase.header) {
+          throw new Error(
+            `${testCase.label} 第 ${band.page} 页页眉：期望 ${testCase.header}，实际 ${band.header}`,
+          );
+        }
+        if (testCase.footer && band.footer !== `第 ${band.page} 页`) {
+          throw new Error(
+            `${testCase.label} 第 ${band.page} 页页脚：期望 第 ${band.page} 页，实际 ${band.footer}`,
+          );
+        }
+      }
+
+      await waitFor(
+        async () =>
+          evaluate(
+            cdp,
+            sessionId,
+            `(() => {
+              const button = document.querySelector('[data-action="export"]');
+              return Boolean(button && !button.disabled);
+            })()`,
+          ),
+        15_000,
+        `${testCase.label} 导出按钮可用`,
+      );
+      await evaluate(
+        cdp,
+        sessionId,
+        `document.querySelector('[data-action="export"]').click()`,
+      );
+
+      const pdfPath = await waitFor(
+        () => {
+          if (pageErrors.length > 0) {
+            throw new Error(`${testCase.label} 导出报错：\n${pageErrors.join("\n")}`);
+          }
+          const files = fs
+            .readdirSync(downloadDir)
+            .filter((file) => file.toLowerCase().endsWith(".pdf"));
+          if (files.length === 0) return null;
+          const candidate = path.join(downloadDir, files[0]);
+          const firstSize = fs.statSync(candidate).size;
+          if (firstSize <= 0) return null;
+          return sleep(200).then(() =>
+            fs.statSync(candidate).size === firstSize ? candidate : null,
+          );
+        },
+        120_000,
+        `${testCase.label} PDF`,
+      );
+
+      const textPath = path.join(downloadDir, "export.txt");
+      execFileSync(pdftotext, ["-enc", "UTF-8", pdfPath, textPath], {
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      const textPages = parsePages(fs.readFileSync(textPath, "utf8"));
+      const pdfCount = countPages(pdfPath, pdfinfo, textPages);
+
+      if (preview.count !== pdfCount.count) {
+        throw new Error(
+          `${testCase.label} 页数不一致：预览 ${preview.count} 页，导出 ${pdfCount.count} 页（${pdfCount.source}）`,
+        );
+      }
+
+      const elapsed = Math.round(preview.ms);
+      maxMs = Math.max(maxMs, elapsed);
+      results.push({
+        label: testCase.label,
+        pages: preview.count,
+        ms: elapsed,
+      });
+      console.log(
+        `✔ ${testCase.label.padEnd(18)} 预览 ${preview.count} 页 = PDF ${pdfCount.count} 页  快照 ${elapsed} ms`,
+      );
+    } finally {
+      if (targetId) {
+        try {
+          await cdp.send("Target.closeTarget", { targetId });
+        } catch {
+          /* already closed */
+        }
+      }
+      try {
+        await cdp.send("Target.disposeBrowserContext", { browserContextId });
+      } catch {
+        /* already disposed */
+      }
+      try {
+        fs.rmSync(downloadDir, { recursive: true, force: true, maxRetries: 3 });
+      } catch {
+        /* Chrome may still hold a file on Windows */
+      }
+    }
+  }
+
+  console.log(
+    `✔ 分页预览：${results.length} 个用例，预览页数均等于导出 PDF；最长快照 ${maxMs} ms`,
+  );
+}
+
 /* ------------------------------------------------------------------- main */
 
 async function main() {
@@ -513,6 +878,11 @@ async function main() {
       downloadPath: downloadDir,
       eventsEnabled: false,
     });
+
+    if (pagination) {
+      await runPaginationSuite({ cdp, url, pdfinfo, pdftotext });
+      return;
+    }
 
     const { targetId } = await cdp.send("Target.createTarget", { url });
     const { sessionId } = await cdp.send("Target.attachToTarget", {

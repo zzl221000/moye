@@ -45,3 +45,8 @@ jobs:
       # CI keeps the check independent of the host pdftotext's line wrapping.
       - name: E2E export (page count + key text)
         run: node tests/e2e.mjs --ci
+
+      # Preview pagination must agree with the real export for every fixture
+      # and the paper/margin/band variants.
+      - name: E2E pagination (preview = PDF)
+        run: node tests/e2e.mjs --pagination
