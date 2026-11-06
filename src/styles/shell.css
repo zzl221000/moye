@@ -76,6 +76,18 @@ button {
   outline-offset: var(--moye-focus-ring-offset);
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --- frame --------------------------------------------------------------- */
 
 .app-shell {
@@ -265,6 +277,11 @@ button {
   color: var(--moye-color-text-primary);
 }
 
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -387,13 +404,23 @@ button {
   min-width: 0;
 }
 
+/* A continuous A4-width sheet. The export uses the same 698px content
+   column; the preview scales the whole sheet with `zoom`, which keeps every
+   line break identical to the PDF while fitting the pane. */
 .preview-paper {
   position: relative;
-  width: min(100%, var(--moye-preview-paper-width));
-  aspect-ratio: 210 / 297;
+  flex: none;
+  width: var(--moye-preview-paper-width);
+  min-height: var(--moye-preview-paper-height);
+  padding: var(--moye-preview-paper-margin);
+  zoom: var(--moye-preview-zoom, 1);
   border-radius: var(--moye-radius-page);
   background: var(--moye-color-surface-page);
   box-shadow: var(--moye-elevation-paper);
+}
+
+.preview-paper__content {
+  min-width: 0;
 }
 
 .preview-paper::after {

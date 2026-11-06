@@ -1,0 +1,11 @@
+/* export-host.css — the browser-side copy of the CLI page's font registration.
+   Loaded from the frozen asset seam (`styles/export-host.css`), never bundled,
+   so the preview and dompdf see the same face the CLI embeds. The path is
+   relative to this file: /styles/ -> /fonts/ under the Pages base. */
+
+@font-face {
+  font-family: "SourceHanSansSC-Regular";
+  src: url("../fonts/SourceHanSansSC-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
