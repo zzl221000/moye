@@ -39,6 +39,9 @@ const INITIAL_STATE: WritingState = {
 /** Preview refresh delay after a keystroke, in milliseconds. */
 export const PREVIEW_DEBOUNCE_MS = 150;
 
+/** One actionable sentence; the technical cause stays in the console. */
+const EXPORT_FAILURE_MESSAGE = "导出失败，请重试";
+
 function initialWritingState(): WritingState {
   const draft = readDraft(browserDraftStorage());
   if (!draft) return INITIAL_STATE;
@@ -204,7 +207,7 @@ export default function App() {
       );
     } catch (error) {
       console.error(error);
-      setExportError(error instanceof Error ? error.message : "导出失败");
+      setExportError(EXPORT_FAILURE_MESSAGE);
     } finally {
       setExporting(false);
     }

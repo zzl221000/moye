@@ -148,7 +148,7 @@ describe("design token contract", () => {
       "moye-palette-paper-warm": "#fffdf9",
       "moye-palette-ink": "#1b1f24",
       "moye-palette-ink-soft": "#414950",
-      "moye-palette-muted": "#6b7279",
+      "moye-palette-muted": "#646c73",
       "moye-palette-faint": "#9aa1a8",
       "moye-palette-line": "#e4e0d8",
       "moye-palette-line-strong": "#d2ccc0",

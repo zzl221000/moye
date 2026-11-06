@@ -15,13 +15,13 @@ const SAVE_LABEL: Record<SaveState, string> = {
   idle: "未保存",
   saved: "已保存",
   dirty: "未保存",
-  error: "保存失败",
+  error: "保存失败，请重试",
 };
 
 export default function StatusBar(props: StatusBarProps) {
   return (
     <footer class="statusbar" aria-label="状态栏">
-      <span class="statusbar__group">
+      <span class="statusbar__group" role="status">
         <span class="statusbar__dot" data-state={props.saveState} aria-hidden="true" />
         <span>{SAVE_LABEL[props.saveState]}</span>
       </span>

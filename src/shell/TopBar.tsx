@@ -37,12 +37,24 @@ export default function TopBar(props: TopBarProps) {
       <span class="topbar__spacer" aria-hidden="true" />
 
       <div class="topbar__actions">
-        <button class="btn" type="button" title="打开" onClick={props.onOpen}>
+        <button
+          class="btn"
+          type="button"
+          aria-label="打开"
+          title="打开"
+          onClick={props.onOpen}
+        >
           <OpenIcon />
           <span class="btn__label">打开</span>
         </button>
 
-        <button class="btn" type="button" title="保存" onClick={props.onSave}>
+        <button
+          class="btn"
+          type="button"
+          aria-label="保存"
+          title="保存"
+          onClick={props.onSave}
+        >
           <SaveIcon />
           <span class="btn__label">保存</span>
         </button>
@@ -52,6 +64,7 @@ export default function TopBar(props: TopBarProps) {
         <button
           class="btn btn--primary"
           type="button"
+          aria-label="导出 PDF"
           title={props.exportError ?? "导出 PDF"}
           data-action="export"
           aria-busy={props.exporting ? "true" : "false"}

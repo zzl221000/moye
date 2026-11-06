@@ -582,6 +582,7 @@ export class WritingSession {
     input.type = "file";
     input.accept = ".md,.markdown,.txt,text/markdown,text/plain";
     input.hidden = true;
+    input.setAttribute("aria-label", "选择 Markdown 文件");
     input.addEventListener("change", () => {
       const file = input.files?.[0];
       input.value = "";
