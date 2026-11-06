@@ -214,3 +214,87 @@ export function CodeBlockIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function InsertColumnIcon(props: IconProps) {
+  const size = () => props.size ?? 18;
+  return (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="12" height="16" rx="2" />
+      <path d="M9 4v16" />
+      <path d="M19 9v6M16 12h6" />
+    </svg>
+  );
+}
+
+export function InsertRowIcon(props: IconProps) {
+  const size = () => props.size ?? 18;
+  return (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="3" width="16" height="12" rx="2" />
+      <path d="M4 9h16" />
+      <path d="M12 16v6M9 19h6" />
+    </svg>
+  );
+}
+
+export function DeleteColumnIcon(props: IconProps) {
+  const size = () => props.size ?? 18;
+  return (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="4" width="12" height="16" rx="2" />
+      <path d="M9 4v16" />
+      <path d="M16 12h6" />
+    </svg>
+  );
+}
+
+export function DeleteRowIcon(props: IconProps) {
+  const size = () => props.size ?? 18;
+  return (
+    <svg
+      width={size()}
+      height={size()}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="4" y="3" width="16" height="12" rx="2" />
+      <path d="M4 9h16" />
+      <path d="M9 19h6" />
+    </svg>
+  );
+}

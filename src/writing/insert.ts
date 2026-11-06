@@ -38,12 +38,43 @@ export interface ImageInsertion {
   readonly inline: boolean;
 }
 
-export const TABLE_TEMPLATE = [
-  "| 列 1 | 列 2 |",
-  "| --- | --- |",
-  "|  |  |",
-  "|  |  |",
-].join("\n");
+/** Smallest and largest table the size picker offers, in either direction. */
+export const TABLE_SIZE_MIN = 1;
+export const TABLE_SIZE_MAX = 8;
+export const TABLE_DEFAULT_COLUMNS = 3;
+export const TABLE_DEFAULT_ROWS = 2;
+
+/** @param value - Requested row or column count. @returns A whole count inside the picker's range. */
+export function clampTableSize(value: number): number {
+  const whole = Number.isFinite(value) ? Math.trunc(value) : TABLE_SIZE_MIN;
+  return Math.min(TABLE_SIZE_MAX, Math.max(TABLE_SIZE_MIN, whole));
+}
+
+/**
+ * @param columns - Header and body column count.
+ * @param rows - Body row count, excluding the header and separator.
+ * @returns A GFM table whose header labels are ready to rename.
+ */
+export function buildTableTemplate(
+  columns = TABLE_DEFAULT_COLUMNS,
+  rows = TABLE_DEFAULT_ROWS,
+): string {
+  const columnCount = clampTableSize(columns);
+  const rowCount = clampTableSize(rows);
+  const labels = Array.from(
+    { length: columnCount },
+    (_, index) => `列 ${index + 1}`,
+  );
+  const separators = Array.from({ length: columnCount }, () => "---");
+  const empty = Array.from({ length: columnCount }, () => "");
+  const header = `| ${labels.join(" | ")} |`;
+  const separator = `| ${separators.join(" | ")} |`;
+  const body = `| ${empty.join(" | ")} |`;
+  return [header, separator, ...Array<string>(rowCount).fill(body)].join("\n");
+}
+
+/** Default table used by the insert action when no size is supplied. */
+export const TABLE_TEMPLATE = buildTableTemplate();
 
 export const IMAGE_PLACEHOLDER_URL = "images/image.png";
 /** Files above this size stay as a placeholder path instead of bloating the document. */
@@ -100,14 +131,18 @@ function blockBreakAfter(after: string): string {
 }
 
 /**
- * Inserts a two-column GFM table with a header, separator and two empty rows.
- * A non-empty selection is replaced. The first header label is selected so it
- * can be renamed immediately.
+ * Inserts a clamped GFM table with a header, separator and `rows` empty body
+ * rows. A non-empty selection is replaced. The first header label is selected
+ * so it can be renamed immediately.
  */
-export function buildTableInsertion(context: InsertionContext): InsertionPlan {
+export function buildTableInsertion(
+  context: InsertionContext,
+  columns = TABLE_DEFAULT_COLUMNS,
+  rows = TABLE_DEFAULT_ROWS,
+): InsertionPlan {
   const prefix = blockBreakBefore(context.before);
   const suffix = blockBreakAfter(context.after);
-  const text = `${prefix}${TABLE_TEMPLATE}${suffix}`;
+  const text = `${prefix}${buildTableTemplate(columns, rows)}${suffix}`;
   const cellFrom = prefix.length + "| ".length;
   return {
     text,

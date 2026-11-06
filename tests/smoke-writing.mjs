@@ -223,6 +223,30 @@ async function pressEscape(cdp, sessionId) {
   await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...base }, sessionId);
 }
 
+async function pressArrow(cdp, sessionId, key, code, virtualKeyCode) {
+  const base = {
+    key,
+    code,
+    windowsVirtualKeyCode: virtualKeyCode,
+    nativeVirtualKeyCode: virtualKeyCode,
+  };
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", ...base }, sessionId);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...base }, sessionId);
+}
+
+/** @param markdown - GFM table. @returns The cell count of every table line. */
+function tableCellCounts(markdown) {
+  return markdown
+    .split("\n")
+    .filter((line) => line.startsWith("|"))
+    .map((line) => line.trim().replace(/^\||\|$/gu, "").split("|").length);
+}
+
+/** @param markdown - GFM table. @returns Its body row count, excluding header/separator. */
+function tableBodyRows(markdown) {
+  return markdown.split("\n").filter((line) => line.startsWith("|")).length - 2;
+}
+
 async function main() {
   const chromePath = findChrome();
   if (!chromePath) {
@@ -414,6 +438,318 @@ async function main() {
       },
       10_000,
       "预览跟随当前文档并给出页数",
+    );
+
+    // Table insertion: the trigger opens an anchored 8×8 size grid. Hovering
+    // previews the shape, Escape abandons it, and Enter inserts the focused one.
+    await evaluate(cdp, sessionId, 'window.__moye.replace("")');
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('button[aria-label="插入表格"]').click()`,
+    );
+    const pickerInitial = await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const trigger = document.querySelector('button[aria-label="插入表格"]');
+            const picker = document.getElementById("insert-table-picker");
+            if (!trigger || !picker) return null;
+            const anchor = trigger.getBoundingClientRect();
+            const box = picker.getBoundingClientRect();
+            return {
+              cells: picker.querySelectorAll('[role="gridcell"]').length,
+              reading: picker.querySelector(".table-picker__reading")?.textContent?.trim(),
+              focused: document.activeElement?.getAttribute("aria-label"),
+              anchored: box.top >= anchor.bottom && Math.abs(box.left - anchor.left) < 24,
+            };
+          })()`,
+        ),
+      5_000,
+      "表格尺寸网格打开",
+    );
+    if (
+      pickerInitial.cells !== 64 ||
+      pickerInitial.reading !== "3 × 2" ||
+      pickerInitial.focused !== "3 列 2 行" ||
+      !pickerInitial.anchored
+    ) {
+      throw new Error(`表格尺寸网格初始状态不对：${JSON.stringify(pickerInitial)}`);
+    }
+
+    const hoverTarget = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const cell = document.querySelector('[data-table-column="4"][data-table-row="3"]');
+        if (!cell) return null;
+        const box = cell.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      })()`,
+    );
+    if (!hoverTarget) throw new Error("找不到 4 列 3 行网格单元");
+    await cdp.send(
+      "Input.dispatchMouseEvent",
+      { type: "mouseMoved", x: hoverTarget.x, y: hoverTarget.y },
+      sessionId,
+    );
+    const hovered = await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `(() => ({
+            reading: document.querySelector(".table-picker__reading")?.textContent?.trim(),
+            active: document.querySelectorAll(".table-picker__cell--active").length,
+          }))()`,
+        ),
+      5_000,
+      "悬停高亮尺寸",
+    );
+    if (hovered.reading !== "4 × 3" || hovered.active !== 12) {
+      throw new Error(`悬停尺寸高亮不对：${JSON.stringify(hovered)}`);
+    }
+
+    await pressEscape(cdp, sessionId);
+    const escapedPicker = await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `(() => ({
+            open: Boolean(document.getElementById("insert-table-picker")),
+            focused: document.activeElement?.getAttribute("aria-label"),
+            markdown: window.__moye.getMarkdown(),
+          }))()`,
+        ),
+      5_000,
+      "Escape 关闭尺寸网格",
+    );
+    if (
+      escapedPicker.open ||
+      escapedPicker.focused !== "插入表格" ||
+      escapedPicker.markdown !== ""
+    ) {
+      throw new Error(`Escape 没有关闭并归还焦点：${JSON.stringify(escapedPicker)}`);
+    }
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('button[aria-label="插入表格"]').click()`,
+    );
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.activeElement?.getAttribute("aria-label") === "3 列 2 行"`,
+        ),
+      5_000,
+      "重新打开尺寸网格",
+    );
+    await pressArrow(cdp, sessionId, "ArrowRight", "ArrowRight", 39);
+    await pressArrow(cdp, sessionId, "ArrowDown", "ArrowDown", 40);
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `(() => ({
+            reading: document.querySelector(".table-picker__reading")?.textContent?.trim(),
+            focused: document.activeElement?.getAttribute("aria-label"),
+          }))()`,
+        ).then((state) => state.reading === "4 × 3" && state.focused === "4 列 3 行"),
+      5_000,
+      "方向键移动尺寸网格",
+    );
+    await pressEnter(cdp, sessionId);
+    await waitFor(
+      async () => {
+        const markdown = await evaluate(
+          cdp,
+          sessionId,
+          "window.__moye.getMarkdown()",
+        );
+        return markdown &&
+          tableCellCounts(markdown).every((count) => count === 4) &&
+          tableCellCounts(markdown).length === 5 &&
+          tableBodyRows(markdown) === 3
+          ? markdown
+          : null;
+      },
+      5_000,
+      "插入 4 列 3 行表格",
+    );
+
+    await waitFor(
+      async () => {
+        const state = await evaluate(
+          cdp,
+          sessionId,
+          `(() => {
+            const doc = document.querySelector(".preview-paper .pdf-doc");
+            return {
+              headers: doc?.querySelectorAll("table thead th").length ?? 0,
+              rows: doc?.querySelectorAll("table tbody tr").length ?? 0,
+            };
+          })()`,
+        );
+        return state.headers === 4 && state.rows === 3 ? state : null;
+      },
+      5_000,
+      "预览同步插入的表格",
+    );
+
+    // The header caret already shows the actions; the header row itself cannot
+    // be deleted. Clicking a body cell must re-read the selection-only change.
+    const contextLabels = ["在右侧插入列", "在下方插入行", "删除列", "删除行"];
+    const contextState = () =>
+      evaluate(
+        cdp,
+        sessionId,
+        `(() => {
+          const labels = ${JSON.stringify(contextLabels)};
+          return {
+            present: labels.every((label) => Boolean(document.querySelector('button[aria-label="' + label + '"]'))),
+            deleteRowDisabled: document.querySelector('button[aria-label="删除行"]')?.disabled ?? null,
+            deleteColumnDisabled: document.querySelector('button[aria-label="删除列"]')?.disabled ?? null,
+          };
+        })()`,
+      );
+    await waitFor(
+      async () => {
+        const state = await contextState();
+        return state.present &&
+          state.deleteRowDisabled === true &&
+          state.deleteColumnDisabled === false
+          ? state
+          : null;
+      },
+      5_000,
+      "表格内显示上下文动作",
+    );
+
+    const bodyCell = await evaluate(
+      cdp,
+      sessionId,
+      `(() => {
+        const cell = document.querySelector(".msfe-table-row:not(.msfe-table-header) .msfe-table-cell");
+        if (!cell) return null;
+        const box = cell.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      })()`,
+    );
+    if (!bodyCell) throw new Error("找不到表格正文单元格");
+    await cdp.send(
+      "Input.dispatchMouseEvent",
+      { type: "mousePressed", x: bodyCell.x, y: bodyCell.y, button: "left", buttons: 1, clickCount: 1 },
+      sessionId,
+    );
+    await cdp.send(
+      "Input.dispatchMouseEvent",
+      { type: "mouseReleased", x: bodyCell.x, y: bodyCell.y, button: "left", buttons: 0, clickCount: 1 },
+      sessionId,
+    );
+    await waitFor(
+      async () => {
+        const state = await contextState();
+        return state.present &&
+          state.deleteRowDisabled === false &&
+          state.deleteColumnDisabled === false
+          ? state
+          : null;
+      },
+      5_000,
+      "点击正文单元格后启用删行",
+    );
+
+    // Each structural command must rewrite every row and reach the preview.
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('button[aria-label="在右侧插入列"]').click()`,
+    );
+    await waitFor(
+      async () => {
+        const markdown = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return markdown &&
+          tableCellCounts(markdown).every((count) => count === 5) &&
+          tableCellCounts(markdown).length === 5
+          ? markdown
+          : null;
+      },
+      5_000,
+      "加列后每一行都增加一列",
+    );
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('button[aria-label="在下方插入行"]').click()`,
+    );
+    await waitFor(
+      async () => {
+        const markdown = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return markdown && tableBodyRows(markdown) === 4 ? markdown : null;
+      },
+      5_000,
+      "加行",
+    );
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('button[aria-label="删除列"]').click()`,
+    );
+    await waitFor(
+      async () => {
+        const markdown = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return markdown && tableCellCounts(markdown).every((count) => count === 4)
+          ? markdown
+          : null;
+      },
+      5_000,
+      "删列",
+    );
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `document.querySelector('button[aria-label="删除行"]').click()`,
+    );
+    const afterDeleteRow = await waitFor(
+      async () => {
+        const markdown = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
+        return markdown && tableBodyRows(markdown) === 3 ? markdown : null;
+      },
+      5_000,
+      "删行",
+    );
+
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moye.replace(${JSON.stringify(`${afterDeleteRow}\n\n普通段落`)})`,
+    );
+    await evaluate(cdp, sessionId, "window.__moye.focus()");
+    await pressShortcut(cdp, sessionId, "End", "End", 35, 2);
+    await waitFor(
+      async () => {
+        const state = await contextState();
+        return !state.present;
+      },
+      5_000,
+      "离开表格后隐藏上下文动作",
+    );
+
+    // The rest of the smoke expects the original mixed fixture.
+    await evaluate(
+      cdp,
+      sessionId,
+      `window.__moye.replace(${JSON.stringify(FIXTURE)})`,
     );
 
     // Drag the separator: the fraction changes, persists, and survives reload
@@ -1299,13 +1635,24 @@ async function main() {
 
     await resetWritingSurface();
     await clickInsert("插入表格");
+    await waitFor(
+      async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.activeElement?.getAttribute("aria-label") === "3 列 2 行"`,
+        ),
+      5_000,
+      "默认表格尺寸获得焦点",
+    );
+    await pressEnter(cdp, sessionId);
     const tableMarkdown = await waitFor(
       async () => {
         const value = await evaluate(cdp, sessionId, "window.__moye.getMarkdown()");
         return typeof value === "string" &&
-          value.includes("| 列 1 | 列 2 |") &&
-          value.includes("| --- | --- |") &&
-          (value.match(/^\|  \|  \|$/gmu) ?? []).length === 2
+          value.includes("| 列 1 | 列 2 | 列 3 |") &&
+          value.includes("| --- | --- | --- |") &&
+          (value.match(/^\|  \|  \|  \|$/gmu) ?? []).length === 2
           ? value
           : null;
       },
@@ -1317,7 +1664,7 @@ async function main() {
         evaluate(
           cdp,
           sessionId,
-          `document.querySelectorAll(".msfe-table-cell").length >= 6`,
+          `document.querySelectorAll(".msfe-table-cell").length >= 9`,
         ),
       5_000,
       "表格 live 投影",
@@ -1353,8 +1700,19 @@ async function main() {
     await clickInsert("插入表格");
     await waitFor(
       async () =>
+        evaluate(
+          cdp,
+          sessionId,
+          `document.activeElement?.getAttribute("aria-label") === "3 列 2 行"`,
+        ),
+      5_000,
+      "表格替换选区前的尺寸网格",
+    );
+    await pressEnter(cdp, sessionId);
+    await waitFor(
+      async () =>
         (await evaluate(cdp, sessionId, "window.__moye.getMarkdown()")) ===
-        "| 列 1 | 列 2 |\n| --- | --- |\n|  |  |\n|  |  |",
+        "| 列 1 | 列 2 | 列 3 |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |",
       10_000,
       "表格替换选区",
     );

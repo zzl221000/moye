@@ -6,6 +6,7 @@
       "name": "moye",
       "dependencies": {
         "@quirekit/msfe-core": "0.0.1",
+        "@quirekit/msfe-prose": "0.0.1",
         "@quirekit/msfe-starter-kit": "0.0.1",
         "@solidjs/web": "2.0.0-rc.21",
         "solid-js": "2.0.0-rc.21",
